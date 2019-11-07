@@ -1,0 +1,154 @@
+---
+title: "New York City in 2011"
+author: "Natalie"
+date: 2019-03-12
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(sf)
+library(leaflet)
+
+US_ALBERS <- 
+  "+proj=longlat +datum=WGS84 +no_defs"
+
+  # File where generated answers are saved, by default in the home directory
+file_nyc_2011 <- "~/Desktop/DCL/C01/nyc/nyc_2011.rds"
+nyc_2011 <- read_rds(file_nyc_2011)
+
+police_calls_2011_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2011.rds"
+police_calls_2011 <- read_rds(police_calls_2011_file)
+
+nyc_2011_with_calls_file <- 
+  "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2011.rds"
+```
+
+# Count the number of calls per tract
+
+```{r}
+call_geometries <-
+  police_calls_2011 %>% 
+  select(Latitude, Longitude) %>% 
+  filter(!is.na(Latitude), !is.na(Longitude)) %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = US_ALBERS) %>% 
+  st_intersection(nyc_2011$geometry)
+
+calls_per_tract <-
+  st_contains(nyc_2011$geometry, call_geometries) %>% 
+  as_tibble() %>% 
+  group_by(row.id) %>% 
+  transmute(
+    num_calls = n()
+  ) %>% 
+  unique()
+
+nyc_2011_with_calls <-
+  nyc_2011 %>% 
+  mutate(
+    num_calls = calls_per_tract$num_calls,
+    calls_per_person = if_else(
+      condition = (total_pop == 0),
+      true = NA_real_,
+      false = num_calls/total_pop
+    )
+  )
+
+write_rds(
+  x = nyc_2011_with_calls, 
+  path = nyc_2011_with_calls_file, 
+  compress = "gz"
+)
+```
+
+```{r}
+y <- 
+  police_calls_2011 %>% 
+  select(Latitude, Longitude, `Complaint Type`) %>% 
+  filter(!is.na(Latitude), !is.na(Longitude)) %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = US_ALBERS) %>% 
+  st_join(
+    nyc_2011 %>% 
+      st_as_sf() %>% 
+      st_transform(crs = US_ALBERS)
+  ) %>% 
+  filter(!is.na(fips))
+
+y %>% 
+  count(`Complaint Type`, name = "num_calls") %>% 
+  top_n(10, num_calls) %>% 
+  mutate(`Complaint Type` = str_to_title(`Complaint Type`)) %>% 
+  ggplot(
+    mapping = aes(
+      x = fct_reorder(`Complaint Type`, num_calls), 
+      y = num_calls)
+  ) +
+  geom_col(fill = "rosybrown2") +
+  coord_flip() +
+  theme_bw() +
+  labs(
+    title = "Top Ten 311 Call Complaints",
+    x = "",
+    y = "Number of Calls"
+  )
+
+top_per_tract <-
+  y %>% 
+  st_set_geometry(NULL) %>% 
+  group_by(fips, `Complaint Type`) %>% 
+  summarize(num_call = sum(n())) %>% 
+  group_by(fips) %>% 
+  top_n(1, num_call) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  unique() %>% 
+  arrange(fips) %>% 
+  mutate(`Complaint Type` = str_to_title(`Complaint Type`))
+```
+
+
+# Make chloropleth
+
+```{r}
+labels_2011 <- 
+  sprintf(
+    "Average Monthly Rent: $%g<br/>Median Household Income: $%g<br/>Percent White: %g<br/>Number of 311 calls: %g",
+    round(nyc_2011_with_calls$avg_rent), 
+    round(nyc_2011_with_calls$med_income),
+    round(100 * nyc_2011_with_calls$percent_white),
+    nyc_2011_with_calls$num_calls
+  ) %>% 
+  lapply(htmltools::HTML)
+
+calls_vals <- 
+  colorNumeric(
+    palette = "Blues",
+    domain = nyc_2011_with_calls$num_calls
+  )
+
+leaflet() %>%  
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  setView(-73.95, 40.78, 11) %>% 
+  addPolygons(
+    data = nyc_2011$geometry,
+    weight = 1,
+    fillOpacity = 1,
+    color = calls_vals(nyc_2011_with_calls$num_calls),
+    label = labels_2011,
+    highlightOptions = highlightOptions(
+      color = "red", 
+      weight = 3,
+      bringToFront = TRUE
+    )
+  ) %>%
+  addLegend(
+    "bottomright", 
+    pal = calls_vals, 
+    values = nyc_2011_with_calls$num_calls,
+    title = "Number of calls",
+    opacity = 1,
+    na.label = element_blank()
+  )
+```

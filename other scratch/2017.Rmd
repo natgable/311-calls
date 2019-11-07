@@ -1,0 +1,64 @@
+---
+title: "New York City in 2017"
+author: "Natalie"
+date: 2019-03-12
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(sf)
+library(leaflet)
+
+US_ALBERS <- 
+  "+proj=longlat +datum=WGS84 +no_defs"
+
+  # File where generated answers are saved, by default in the home directory
+file_nyc_2017 <- "~/Desktop/DCL/C01/nyc/nyc_2017.rds"
+nyc_2017 <- read_rds(file_nyc_2017)
+
+police_calls_2017_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2017.rds"
+police_calls_2017 <- read_rds(police_calls_2017_file)
+
+nyc_2017_with_calls_file <- 
+  "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2017.rds"
+```
+
+# Count the number of calls per tract
+
+```{r}
+call_geometries <-
+  police_calls_2017 %>% 
+  select(Latitude, Longitude) %>% 
+  filter(!is.na(Latitude), !is.na(Longitude)) %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = US_ALBERS) %>% 
+  st_intersection(nyc_2017$geometry)
+
+calls_per_tract <-
+  st_contains(nyc_2017$geometry, call_geometries) %>% 
+  as_tibble() %>% 
+  group_by(row.id) %>% 
+  transmute(
+    num_calls = n()
+  ) %>% 
+  unique()
+
+nyc_2017_with_calls <-
+  nyc_2017 %>% 
+  mutate(
+    num_calls = calls_per_tract$num_calls,
+    calls_per_person = if_else(
+      condition = (total_pop == 0),
+      true = NA_real_,
+      false = num_calls/total_pop
+    )
+  )
+
+write_rds(
+  x = nyc_2017_with_calls, 
+  path = nyc_2017_with_calls_file, 
+  compress = "gz"
+)
+```

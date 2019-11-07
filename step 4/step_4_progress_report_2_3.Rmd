@@ -1,0 +1,430 @@
+---
+title: "Progress Report 2 Part 2"
+author: "Natalie"
+date: 2019-02-20
+output: html_document
+---
+
+# Hello! Welcome to Natalie's scratchwork (because she organized her data really poorly before and made a mess out of the other RMarkdown files)
+
+A little explanation for this file:
+
+I am working with a large dataset that was taking forever to run, so I divided all my data up into smaller chunks to make it more manageable. This RMarkdown file is to have a workspace for these smaller data chunks, so I can save time in running and knitting!
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(leaflet)
+library(leaflet.extras)
+library(sf)
+library(maptools)
+# Load in all data
+ # Police call data
+# police_calls_2010_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2010.rds"
+# police_calls_2011_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2011.rds"
+# police_calls_2012_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2012.rds"
+# police_calls_2013_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2013.rds"
+# police_calls_2014_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2014.rds"
+# police_calls_2015_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2015.rds"
+# police_calls_2016_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2016.rds"
+# police_calls_2017_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2017.rds"
+# police_calls_2010 <- read_rds(police_calls_2010_file)
+# police_calls_2011 <- read_rds(police_calls_2011_file)
+# police_calls_2012 <- read_rds(police_calls_2012_file)
+# police_calls_2013 <- read_rds(police_calls_2013_file)
+# police_calls_2014 <- read_rds(police_calls_2014_file)
+# police_calls_2015 <- read_rds(police_calls_2015_file)
+# police_calls_2016 <- read_rds(police_calls_2016_file)
+# police_calls_2017 <- read_rds(police_calls_2017_file)
+ # Rent data
+rent_2010_file <- "~/Desktop/DCL/C01/rent/ACS_10_5YR_B25061_with_ann.csv"
+rent_2011_file <- "~/Desktop/DCL/C01/rent/ACS_11_5YR_B25061_with_ann.csv"
+rent_2012_file <- "~/Desktop/DCL/C01/rent/ACS_12_5YR_B25061_with_ann.csv"
+rent_2013_file <- "~/Desktop/DCL/C01/rent/ACS_13_5YR_B25061_with_ann.csv"
+rent_2014_file <- "~/Desktop/DCL/C01/rent/ACS_14_5YR_B25061_with_ann.csv"
+rent_2015_file <- "~/Desktop/DCL/C01/rent/ACS_15_5YR_B25061_with_ann.csv"
+rent_2016_file <- "~/Desktop/DCL/C01/rent/ACS_16_5YR_B25061_with_ann.csv"
+rent_2017_file <- "~/Desktop/DCL/C01/rent/ACS_17_5YR_B25061_with_ann.csv"
+ # Median household income data
+income_2010_file <- 
+  "~/Desktop/DCL/C01/median_household_income/ACS_10_5YR_B19013_with_ann.csv"
+income_2011_file <- 
+  "~/Desktop/DCL/C01/median_household_income/ACS_11_5YR_B19013_with_ann.csv"
+income_2012_file <- 
+  "~/Desktop/DCL/C01/median_household_income/ACS_12_5YR_B19013_with_ann.csv"
+income_2013_file <- 
+  "~/Desktop/DCL/C01/median_household_income/ACS_13_5YR_B19013_with_ann.csv"
+income_2014_file <- 
+  "~/Desktop/DCL/C01/median_household_income/ACS_14_5YR_B19013_with_ann.csv"
+income_2015_file <- 
+  "~/Desktop/DCL/C01/median_household_income/ACS_15_5YR_B19013_with_ann.csv"
+income_2016_file <- 
+  "~/Desktop/DCL/C01/median_household_income/ACS_16_5YR_B19013_with_ann.csv"
+income_2017_file <- 
+  "~/Desktop/DCL/C01/median_household_income/ACS_17_5YR_B19013_with_ann.csv"
+ # Race data 
+race_2010_file <- "~/Desktop/DCL/C01/race/ACS_10_5YR_B02001_with_ann.csv"
+race_2011_file <- "~/Desktop/DCL/C01/race/ACS_11_5YR_B02001_with_ann.csv"
+race_2012_file <- "~/Desktop/DCL/C01/race/ACS_12_5YR_B02001_with_ann.csv"
+race_2013_file <- "~/Desktop/DCL/C01/race/ACS_13_5YR_B02001_with_ann.csv"
+race_2014_file <- "~/Desktop/DCL/C01/race/ACS_14_5YR_B02001_with_ann.csv"
+race_2015_file <- "~/Desktop/DCL/C01/race/ACS_15_5YR_B02001_with_ann.csv"
+race_2016_file <- "~/Desktop/DCL/C01/race/ACS_16_5YR_B02001_with_ann.csv"
+race_2017_file <- "~/Desktop/DCL/C01/race/ACS_17_5YR_B02001_with_ann.csv"
+
+nyc_2010_file <- "~/Desktop/DCL/C01/nyc/nyc_2010.rds"
+nyc_2011_file <- "~/Desktop/DCL/C01/nyc/nyc_2011.rds"
+nyc_2012_file <- "~/Desktop/DCL/C01/nyc/nyc_2012.rds"
+nyc_2013_file <- "~/Desktop/DCL/C01/nyc/nyc_2013.rds"
+nyc_2014_file <- "~/Desktop/DCL/C01/nyc/nyc_2014.rds"
+nyc_2015_file <- "~/Desktop/DCL/C01/nyc/nyc_2015.rds"
+nyc_2016_file <- "~/Desktop/DCL/C01/nyc/nyc_2016.rds"
+nyc_2017_file <- "~/Desktop/DCL/C01/nyc/nyc_2017.rds"
+
+US_ALBERS <- 
+  "+proj=longlat +datum=WGS84 +no_defs"
+
+ny_census_tracts <-
+  st_read(
+    '~/Desktop/DCL/C01/gz_2010_36_140_00_500k/gz_2010_36_140_00_500k.shp'
+  ) %>% 
+  st_transform(crs = US_ALBERS)
+```
+
+Wrangling data on rent:
+
+```{r}
+rent_floor_2010_2014 <-
+  c(1000, 1250, 1500, 100, 150, 2000, 200, 250, 300, 350, 400, 450, 500,
+    550, 600, 650, 700, 750, 800, 900, 0)
+calculate_rent_prices_2010_2014 <- function(file_name) {
+  file_name %>% 
+  read_csv(
+    col_names = TRUE,
+    skip = 1,
+    col_types = cols_only(
+      Id = col_character(),
+      `Estimate; Total: - Less than $100` = col_integer(),
+      `Estimate; Total: - $100 to $149` = col_integer(),
+      `Estimate; Total: - $150 to $199` = col_integer(),
+      `Estimate; Total: - $200 to $249` = col_integer(),
+      `Estimate; Total: - $250 to $299` = col_integer(),
+      `Estimate; Total: - $300 to $349` = col_integer(),
+      `Estimate; Total: - $350 to $399` = col_integer(),
+      `Estimate; Total: - $400 to $449` = col_integer(),
+      `Estimate; Total: - $450 to $499` = col_integer(),
+      `Estimate; Total: - $500 to $549` = col_integer(),
+      `Estimate; Total: - $550 to $599` = col_integer(),
+      `Estimate; Total: - $600 to $649` = col_integer(),
+      `Estimate; Total: - $650 to $699` = col_integer(),
+      `Estimate; Total: - $700 to $749` = col_integer(),
+      `Estimate; Total: - $750 to $799` = col_integer(),
+      `Estimate; Total: - $800 to $899` = col_integer(),
+      `Estimate; Total: - $900 to $999` = col_integer(),
+      `Estimate; Total: - $1,000 to $1,249` = col_integer(),
+      `Estimate; Total: - $1,250 to $1,499` = col_integer(),
+      `Estimate; Total: - $1,500 to $1,999` = col_integer(),
+      `Estimate; Total: - $2,000 or more` = col_integer()
+    )
+  ) %>% 
+  gather(key = var_name, value = value, 2:ncol(.)) %>% 
+  spread_(key = names(.)[1],value = 'value') %>% 
+  mutate_at(
+    vars(-var_name),
+    ~ (. * rent_floor_2010_2014) / sum(.) %>% cumsum(.)
+  ) %>% 
+  gather(key = fips, value = rents, -var_name) %>% 
+  select(-var_name) %>% 
+  group_by(fips) %>% 
+  summarize(
+    avg_rent = sum(rents)
+  ) 
+}
+rent_2010 <-
+  calculate_rent_prices_2010_2014(rent_2010_file)
+rent_2011 <-
+  calculate_rent_prices_2010_2014(rent_2011_file)
+rent_2012 <-
+  calculate_rent_prices_2010_2014(rent_2012_file)
+rent_2013 <-
+  calculate_rent_prices_2010_2014(rent_2013_file)
+rent_2014 <-
+  calculate_rent_prices_2010_2014(rent_2014_file)
+rent_floor_2015_2017 <-
+  c(1000, 1250, 1500, 100, 150, 2000, 2500, 200, 250, 3000, 3500, 300,
+    350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 900, 0)
+calculate_rent_prices_2015_2017 <- function(file_name) {
+  file_name %>% 
+  read_csv(
+    col_names = TRUE,
+    skip = 1,
+    col_types = cols_only(
+      Id = col_character(),
+      `Estimate; Total: - Less than $100` = col_integer(),
+      `Estimate; Total: - $100 to $149` = col_integer(),
+      `Estimate; Total: - $150 to $199` = col_integer(),
+      `Estimate; Total: - $200 to $249` = col_integer(),
+      `Estimate; Total: - $250 to $299` = col_integer(),
+      `Estimate; Total: - $300 to $349` = col_integer(),
+      `Estimate; Total: - $350 to $399` = col_integer(),
+      `Estimate; Total: - $400 to $449` = col_integer(),
+      `Estimate; Total: - $450 to $499` = col_integer(),
+      `Estimate; Total: - $500 to $549` = col_integer(),
+      `Estimate; Total: - $550 to $599` = col_integer(),
+      `Estimate; Total: - $600 to $649` = col_integer(),
+      `Estimate; Total: - $650 to $699` = col_integer(),
+      `Estimate; Total: - $700 to $749` = col_integer(),
+      `Estimate; Total: - $750 to $799` = col_integer(),
+      `Estimate; Total: - $800 to $899` = col_integer(),
+      `Estimate; Total: - $900 to $999` = col_integer(),
+      `Estimate; Total: - $1,000 to $1,249` = col_integer(),
+      `Estimate; Total: - $1,250 to $1,499` = col_integer(),
+      `Estimate; Total: - $1,500 to $1,999` = col_integer(),
+      `Estimate; Total: - $2,000 to $2,499` = col_integer(),
+      `Estimate; Total: - $2,500 to $2,999` = col_integer(),
+      `Estimate; Total: - $3,000 to $3,499` = col_integer(),
+      `Estimate; Total: - $3,500 or more` = col_integer()
+    )
+  ) %>% 
+  gather(key = var_name, value = value, 2:ncol(.)) %>% 
+  spread_(key = names(.)[1],value = 'value') %>% 
+  mutate_at(
+    vars(-var_name),
+    ~ (. * rent_floor_2015_2017) / sum(.) %>% cumsum(.)
+  ) %>% 
+  gather(key = fips, value = rents, -var_name) %>% 
+  select(-var_name) %>% 
+  group_by(fips) %>% 
+  summarize(
+    avg_rent = sum(rents)
+  ) 
+}
+rent_2015 <-
+  calculate_rent_prices_2015_2017(rent_2015_file)
+rent_2016 <-
+  calculate_rent_prices_2015_2017(rent_2016_file)
+rent_2017 <-
+  calculate_rent_prices_2015_2017(rent_2017_file)
+```
+
+Wrangling data on median income:
+
+```{r}
+calculate_median_income <- function(filename) {
+  filename %>% 
+    read_csv(
+      na = "-",
+      skip = 2,
+      col_names = FALSE,
+      col_types = cols_only(
+        X1 = col_character(),
+        X4 = col_character()
+      )
+    ) %>% 
+    transmute(
+      fips = X1,
+      med_income = if_else(
+        condition = (X4 == "250,000+"),
+        true = "250000",
+        false = X4
+      ) %>% 
+        as.integer()
+    )
+}
+income_2010 <- calculate_median_income(income_2010_file)
+income_2011 <- calculate_median_income(income_2011_file)
+income_2012 <- calculate_median_income(income_2012_file)
+income_2013 <- calculate_median_income(income_2013_file)
+income_2014 <- calculate_median_income(income_2014_file)
+income_2015 <- calculate_median_income(income_2015_file)
+income_2016 <- calculate_median_income(income_2016_file)
+income_2017 <- calculate_median_income(income_2017_file)
+```
+
+Wrangling data on race:
+
+```{r}
+calculate_percent_white <- function(filename){
+  filename %>% 
+    read_csv(
+      skip = 2,
+      col_names = FALSE,
+      col_types = cols_only(
+        X1 = col_character(),
+        X4 = col_double(),
+        X6 = col_double()
+      )
+    ) %>% 
+    transmute(
+      fips = X1,
+      percent_white = if_else(
+        condition = (X4 == 0),
+        true = NA_real_,
+        false = X6 / X4
+      ),
+      total_pop = X4
+    )
+}
+
+white_2010 <- calculate_percent_white(race_2010_file)
+white_2011 <- calculate_percent_white(race_2011_file)
+white_2012 <- calculate_percent_white(race_2012_file)
+white_2013 <- calculate_percent_white(race_2013_file)
+white_2014 <- calculate_percent_white(race_2014_file)
+white_2015 <- calculate_percent_white(race_2015_file)
+white_2016 <- calculate_percent_white(race_2016_file)
+white_2017 <- calculate_percent_white(race_2017_file)
+```
+
+Now I'm going to join data to get one dataframe per year.
+
+```{r}
+nyc_2010 <-
+  rent_2010 %>% 
+  left_join(income_2010, by = "fips") %>% 
+  left_join(white_2010, by = "fips")
+nyc_2011 <-
+  rent_2011 %>% 
+  left_join(income_2011, by = "fips") %>% 
+  left_join(white_2011, by = "fips")
+nyc_2012 <-
+  rent_2012 %>% 
+  left_join(income_2012, by = "fips") %>% 
+  left_join(white_2012, by = "fips")
+nyc_2013 <-
+  rent_2012 %>% 
+  left_join(income_2013, by = "fips") %>% 
+  left_join(white_2013, by = "fips")
+nyc_2014 <-
+  rent_2012 %>% 
+  left_join(income_2014, by = "fips") %>% 
+  left_join(white_2014, by = "fips")
+nyc_2015 <-
+  rent_2012 %>% 
+  left_join(income_2015, by = "fips") %>% 
+  left_join(white_2015, by = "fips")
+nyc_2016 <-
+  rent_2016 %>% 
+  left_join(income_2016, by = "fips") %>% 
+  left_join(white_2016, by = "fips")
+nyc_2017 <-
+  rent_2017 %>% 
+  left_join(income_2017, by = "fips") %>% 
+  left_join(white_2017, by = "fips")
+```
+
+Now need to join with tract data to get geometries!
+
+```{r}
+join_geometry <- function(df){
+  df %>% 
+    left_join(
+      ny_census_tracts %>% 
+        transmute(
+          GEO_ID = as.character(GEO_ID)
+        ), 
+      by = c("fips" = "GEO_ID")
+    )
+}
+nyc_2010 <- join_geometry(nyc_2010)
+nyc_2011 <- join_geometry(nyc_2011)
+nyc_2012 <- join_geometry(nyc_2012)
+nyc_2013 <- join_geometry(nyc_2013)
+nyc_2014 <- join_geometry(nyc_2014)
+nyc_2015 <- join_geometry(nyc_2015)
+nyc_2016 <- join_geometry(nyc_2016)
+nyc_2017 <- join_geometry(nyc_2017)
+
+write_rds(x = nyc_2010, path = nyc_2010_file, compress = "gz")
+write_rds(x = nyc_2011, path = nyc_2011_file, compress = "gz")
+write_rds(x = nyc_2012, path = nyc_2012_file, compress = "gz")
+write_rds(x = nyc_2013, path = nyc_2013_file, compress = "gz")
+write_rds(x = nyc_2014, path = nyc_2014_file, compress = "gz")
+write_rds(x = nyc_2015, path = nyc_2015_file, compress = "gz")
+write_rds(x = nyc_2016, path = nyc_2016_file, compress = "gz")
+write_rds(x = nyc_2017, path = nyc_2017_file, compress = "gz")
+```
+
+Now for some interactive mapping!
+
+```{r}
+mod_police_calls_2010 <-
+  police_calls_2010 %>% 
+  select(Latitude, Longitude) %>% 
+  filter(!is.na(Latitude), !is.na(Longitude)) %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = US_ALBERS) %>% 
+  st_intersection(nyc_2010$geometry)
+
+labels_2010 <- 
+  sprintf(
+    "Average Monthly Rent: $%g<br/>Median Household Income: $%g<br/>Percent White: %g",
+    round(nyc_2010$avg_rent), 
+    round(nyc_2010$med_income),
+    round(100 * nyc_2010$percent_white)
+  ) %>% 
+  lapply(htmltools::HTML)
+
+white_vals <- 
+  colorNumeric(
+    palette = "Blues",
+    domain = nyc_2010$percent_white
+  )
+
+leaflet() %>%  
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  setView(-73.95, 40.78, 11) %>% 
+  addPolygons(
+    data = nyc_2010$geometry,
+    weight = 1,
+    fillOpacity = 1,
+    color = white_vals(white_2010$percent_white),
+    label = labels_2010,
+    highlightOptions = highlightOptions(
+      color = "red", 
+      weight = 3,
+      bringToFront = TRUE
+    )
+  ) %>%
+  addLegend("bottomright", pal = white_vals, values = nyc_2010$percent_white,
+    title = "Percentage White",
+    labFormat = labelFormat(suffix = "%"),
+    opacity = 1,
+    na.label = element_blank()
+  )
+```
+
+```{r}
+labels_2017 <- 
+  sprintf(
+  "Average Monthly Rent: $%g<br/>Median Household Income: $%g<br/>Percent White: %g",
+  round(nyc_2017$avg_rent), 
+  round(nyc_2017$med_income),
+  round(100 * nyc_2017$percent_white)
+  ) %>% lapply(htmltools::HTML)
+white_vals <- 
+  colorNumeric(
+    palette = "Blues",
+    domain = nyc_2017$percent_white
+  )
+leaflet() %>%  
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  setView(-73.95, 40.78, 11) %>% 
+  addPolygons(
+    data = nyc_2017$geometry,
+    weight = 1,
+    fillOpacity = 1,
+    color = white_vals(white_2017$percent_white),
+    label = labels_2017,
+    highlightOptions = highlightOptions(
+      color = "red", 
+      weight = 3,
+      bringToFront = TRUE
+    )
+  ) %>%
+  addLegend("bottomright", pal = white_vals, values = nyc_2017$percent_white,
+    title = "Percentage White",
+    labFormat = labelFormat(suffix = "%"),
+    opacity = 1,
+    na.label = NULL
+  ) 
+```

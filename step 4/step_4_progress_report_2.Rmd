@@ -1,0 +1,307 @@
+---
+title: "Progress report 2"
+author: Natalie
+date: 2019-02-18
+output: 
+  html_document:
+    toc: true
+---
+
+```{r include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(maptools)
+library(sf)
+library(dcl)
+library(leaflet)
+library(lubridate)
+library(leaflet.extras)
+
+police_call_data <- "~/Desktop/DCL/C01/police_calls2.rds"
+
+police_calls <- read_rds(police_call_data)
+```
+
+```{r}
+summary(police_calls)
+```
+
+```{r}
+ny_census_tracts <-
+  st_read(
+    '~/Desktop/DCL/C01/gz_2010_36_140_00_500k/gz_2010_36_140_00_500k.shp'
+  )
+```
+
+Trying out some mapping...
+
+```{r}
+lat_lng <-
+  police_calls %>% 
+  select(Latitude, Longitude) %>% 
+  filter(!is.na(Latitude), !is.na(Longitude)) %>% 
+  slice(1:300)
+
+lat_lng_label <-
+  str_c(
+    "Latitude: ", 
+    as.character(lat_lng$Latitude), 
+    "Longitude",
+    as.character(lat_lng$Longitude)
+  )
+
+leaflet() %>% 
+  addProviderTiles(providers$Stamen.TonerLite) %>% 
+  addCircleMarkers(
+    lng = lat_lng$Longitude,
+    lat = lat_lng$Latitude,
+    radius = 1,
+    label = lat_lng_label
+    )
+```
+
+```{r}
+# Get only cases in certain areas
+lat_lng_area <-
+  police_calls %>% 
+  select(Latitude, Longitude, `Complaint Type`) %>% 
+  filter(
+    Latitude >= 40.7571, 
+    Latitude <= 40.7912,
+    Longitude >= -73.9893,
+    Longitude <= -73.9408
+  ) %>% 
+  slice(1:500)
+
+leaflet() %>% 
+  addProviderTiles(providers$Stamen.TonerLite) %>% 
+  addCircleMarkers(
+    lng = lat_lng_area$Longitude,
+    lat = lat_lng_area$Latitude,
+    radius = 1,
+    label = lat_lng_area$`Complaint Type`
+    )
+```
+
+Now I want to parse the dates of the police_calls dataset and divide by year, maybe month (depending on how much information leaflet can show).
+
+```{r}
+# Try this out on a small subset of the dataset
+police_calls_small_test_date <-
+  police_calls %>% 
+  slice(1:10) %>% 
+  mutate(
+    date = map_chr(
+      `Created Date`,
+      ~ str_extract(., "(\\d{2})/(\\d{2})/(\\d{4})")
+    ),
+    date = mdy(date)
+  )
+```
+
+Now apply this to the whole dataset:
+
+```{r}
+police_calls_date <-
+  police_calls %>%  
+  mutate(
+    date = map_chr(
+      `Created Date`,
+      ~ str_extract(., "(\\d{2})/(\\d{2})/(\\d{4})")
+    ),
+    date = mdy(date)
+  )
+```
+
+```{r}
+summary(police_calls_date)
+```
+
+Create separate datasets for each year
+
+```{r}
+police_calls_2010 <-
+  police_calls_date %>%
+  filter(year(date) == 2010)
+
+write_rds(
+  x = police_calls_2010, 
+  path = "~/Desktop/DCL/C01/police_calls_2010.rds",
+  compress = "gz"
+  )
+```
+
+```{r}
+police_calls_2011 <-
+  police_calls_date %>%
+  filter(year(date) == 2011)
+
+write_rds(
+  x = police_calls_2011, 
+  path = "~/Desktop/DCL/C01/police_calls_2011.rds",
+  compress = "gz"
+  )
+```
+
+```{r}
+police_calls_2012 <-
+  police_calls_date %>%
+  filter(year(date) == 2012)
+
+write_rds(
+  x = police_calls_2012, 
+  path = "~/Desktop/DCL/C01/police_calls_2012.rds",
+  compress = "gz"
+  )
+```
+
+```{r}
+police_calls_2013 <-
+  police_calls_date %>%
+  filter(year(date) == 2013)
+
+write_rds(
+  x = police_calls_2013, 
+  path = "~/Desktop/DCL/C01/police_calls_2013.rds",
+  compress = "gz"
+  )
+```
+
+```{r}
+police_calls_2014 <-
+  police_calls_date %>%
+  filter(year(date) == 2014)
+
+write_rds(
+  x = police_calls_2014, 
+  path = "~/Desktop/DCL/C01/police_calls_2014.rds",
+  compress = "gz"
+  )
+```
+
+```{r}
+police_calls_2015 <-
+  police_calls_date %>%
+  filter(year(date) == 2015)
+
+write_rds(
+  x = police_calls_2015, 
+  path = "~/Desktop/DCL/C01/police_calls_2015.rds",
+  compress = "gz"
+  )
+```
+
+```{r}
+police_calls_2016 <-
+  police_calls_date %>%
+  filter(year(date) == 2016)
+
+write_rds(
+  x = police_calls_2016, 
+  path = "~/Desktop/DCL/C01/police_calls_2016.rds",
+  compress = "gz"
+  )
+```
+
+```{r}
+police_calls_2017 <-
+  police_calls_date %>%
+  filter(year(date) == 2017)
+
+write_rds(
+  x = police_calls_2017, 
+  path = "~/Desktop/DCL/C01/police_calls_2017.rds",
+  compress = "gz"
+  )
+```
+
+```{r}
+police_calls_2018 <-
+  police_calls_date %>%
+  filter(year(date) == 2018)
+
+write_rds(
+  x = police_calls_2018, 
+  path = "~/Desktop/DCL/C01/police_calls_2018.rds",
+  compress = "gz"
+  )
+```
+
+```{r}
+police_calls_2019 <-
+  police_calls_date %>%
+  filter(year(date) == 2019)
+
+write_rds(
+  x = police_calls_2019, 
+  path = "~/Desktop/DCL/C01/police_calls_2019.rds",
+  compress = "gz"
+  )
+```
+
+Yay! Now I've parsed these into much smaller, and more manageable datasets! (The first one took about half an hour to run but these smaller ones, divided by years, should run much more quickly and save a lot of time)...For the future, I can just load in these individual RDS files and use those to guide my visualizations.
+
+Now I want to work a bit on dividing the datasets by types of calls (ie types of complaints). I'm basing my categorization off of the article from Buzzfeed. 
+
+Testing out a few things:
+
+```{r}
+# Start with just noise complaints
+noise_2011 <-
+  police_calls_2011 %>% 
+  filter(
+    `Complaint Type` == "Noise",
+    !is.na(Latitude),
+    !is.na(Longitude)
+  )
+
+leaflet() %>% 
+  addProviderTiles(providers$Stamen.TonerLite) %>% 
+  addHeatmap(
+    lat = noise_2011$Latitude,
+    lng = noise_2011$Longitude,
+    intensity = 0.01
+  )
+```
+
+```{r}
+drinking_2011 <-
+  police_calls_2011 %>% 
+  filter(
+    `Complaint Type` == "Drinking",
+    !is.na(Latitude),
+    !is.na(Longitude)
+  )
+
+leaflet() %>% 
+  addProviderTiles(providers$Stamen.TonerLite) %>% 
+  addHeatmap(
+    lat = drinking_2011$Latitude,
+    lng = drinking_2011$Longitude,
+    intensity = 0.1
+    )
+```
+
+
+## Section
+
+# Summary of Progress
+
+A huge update was that I finally figured out how to load in my big, big dataset using a remote server. This took WAY longer than expected, but I learned to use the rice server and run RStudio there. I much prefer the local Rstudio environment (versus the XQuartz one) so I decided to create and rds file via rice and then scp it to the local directory. I've parsed through the police call data and started mapping it.
+
+# Key findings
+
+I started working on mapping and visualizing the police call data (shown above) in specified areas in Manhattan specifically. 
+
+# Current issues
+
+My main current issue is the police call data, which is turning into much more of a challenge than I originally anticipated.
+
+# Plans for challenge
+
+Because the police call data is so big and has been really hard to parse through, I would like to make the challenge more about the census data related to demographics. I would like to incorporate static mapping using sf, and understanding changes in racial and economic demographics within New York City census tracts visually with maps. 
+
+# Plans for next steps
+
+I really need to buckle down and really work on this police data, since I feel like I still have a lot to sort through in terms of geography and mapping. I would love to make some really sophisticated leaflet maps with the police data I have, overlayed with racial and economic makeup data. I also need to think a bit more about the integration of my two different datasets (census and police calls).

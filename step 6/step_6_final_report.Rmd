@@ -1,0 +1,1344 @@
+---
+title: "311 Calls in New York City"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(sf)
+library(leaflet)
+library(lubridate)
+
+US_ALBERS <- 
+  "+proj=longlat +datum=WGS84 +no_defs"
+
+top_seven_complaints <-
+  c(
+    "Heating",
+    "Noise",
+    "General Construction",
+    "Street Condition",
+    "Plumbing",
+    "Paint/Plaster",
+    "Homeless Person Assistance",
+    "Unsanitary Condition"
+  )
+
+nyc_2010_with_calls_file <- 
+  "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2010.rds"
+nyc_2011_with_calls_file <- 
+  "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2011.rds"
+nyc_2012_with_calls_file <- 
+  "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2012.rds"
+nyc_2013_with_calls_file <- 
+  "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2013.rds"
+nyc_2014_with_calls_file <- 
+  "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2014.rds"
+nyc_2015_with_calls_file <- 
+  "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2015.rds"
+nyc_2016_with_calls_file <- 
+  "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2016.rds"
+nyc_2017_with_calls_file <- 
+  "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2017.rds"
+
+nyc_2010_with_calls <- read_rds(nyc_2010_with_calls_file)
+nyc_2011_with_calls <- read_rds(nyc_2011_with_calls_file)
+nyc_2012_with_calls <- read_rds(nyc_2012_with_calls_file)
+nyc_2013_with_calls <- read_rds(nyc_2013_with_calls_file)
+nyc_2014_with_calls <- read_rds(nyc_2014_with_calls_file)
+nyc_2015_with_calls <- read_rds(nyc_2015_with_calls_file)
+nyc_2016_with_calls <- read_rds(nyc_2016_with_calls_file)
+nyc_2017_with_calls <- read_rds(nyc_2017_with_calls_file)
+
+police_calls_2010_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2010.rds"
+police_calls_2011_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2011.rds"
+police_calls_2012_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2012.rds"
+police_calls_2013_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2013.rds"
+police_calls_2014_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2014.rds"
+police_calls_2015_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2015.rds"
+police_calls_2016_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2016.rds"
+police_calls_2017_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2017.rds"
+
+police_calls_2010 <- read_rds(police_calls_2010_file)
+police_calls_2011 <- read_rds(police_calls_2011_file)
+police_calls_2012 <- read_rds(police_calls_2012_file)
+police_calls_2013 <- read_rds(police_calls_2013_file)
+police_calls_2014 <- read_rds(police_calls_2014_file)
+police_calls_2015 <- read_rds(police_calls_2015_file)
+police_calls_2016 <- read_rds(police_calls_2016_file)
+police_calls_2017 <- read_rds(police_calls_2017_file)
+```
+
+```{r}
+generate_chloropleth <- function(data) {
+  labels_year <- 
+    sprintf(
+      "Median Household Income: $%g<br/>Percent White: %g<br/>Number of 311 calls: %g",
+      round(data$med_income),
+      round(100 * data$percent_white),
+      data$num_calls
+    ) %>% 
+    lapply(htmltools::HTML)
+  
+  calls_vals <- 
+    colorNumeric(
+      palette = "plasma",
+      domain = data$num_calls
+    )
+  
+  leaflet() %>%  
+    addProviderTiles(providers$CartoDB.Positron) %>% 
+    setView(-73.95, 40.78, 11.4) %>% 
+    addPolygons(
+      data = data$geometry,
+      weight = 1,
+      fillOpacity = 1,
+      color = calls_vals(data$num_calls),
+      label = labels_year,
+      highlightOptions = highlightOptions(
+        color = "red", 
+        weight = 3,
+        bringToFront = TRUE
+      )
+    ) %>%
+    addLegend(
+      "bottomright", 
+      pal = calls_vals, 
+      values = data$num_calls,
+      title = "Number of calls",
+      opacity = 1,
+      na.label = element_blank()
+    )
+}
+```
+
+```{r}
+single_year <- function(data, year){
+  med_income <-
+    data %>% 
+    mutate(
+      avg_med_income = weighted.mean(
+        x = med_income, 
+        w = total_pop, 
+        na.rm = TRUE
+      )
+    ) %>% 
+    pull(avg_med_income) %>% 
+    unique()
+  
+  percent_white <-
+    data %>% 
+    mutate(
+      avg_percent_white = weighted.mean(
+        x = percent_white, 
+        w = total_pop, 
+        na.rm = TRUE
+      )
+    ) %>% 
+    pull(avg_percent_white) %>% 
+    unique()
+  
+  total_pop <-
+    data %>% 
+    mutate(
+      tot_pop_nyc = sum(total_pop)
+    ) %>% 
+    pull(tot_pop_nyc) %>% 
+    unique()
+  
+  total_calls <-
+    data %>% 
+    mutate(
+      tot_calls = sum(num_calls)
+    ) %>% 
+    pull(tot_calls) %>% 
+    unique()
+  
+  overview <- 
+    tibble(
+      Year = year,
+      `Total Population` = total_pop,
+      `Median Income` = med_income,
+      `Percent White` = percent_white,
+      `Total # of 311 Calls` = total_calls
+    ) 
+}
+```
+
+```{r}
+get_call_data <- function(police_call_data, nyc_data){ 
+  police_call_data %>% 
+  mutate(
+    complaints = str_to_lower(`Complaint Type`)
+  ) %>%
+  mutate(
+    complaints = case_when(
+      str_detect(complaints, "heat") ~ "heating",
+      str_detect(complaints, "noise") ~ "noise",
+      TRUE ~ complaints
+    )
+  ) %>% 
+  select(Latitude, Longitude, complaints, date) %>% 
+  filter(!is.na(Latitude), !is.na(Longitude)) %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = US_ALBERS) %>% 
+  st_join(
+    nyc_data %>% 
+      select(-num_calls, -calls_per_person) %>% 
+      st_as_sf() %>% 
+      st_transform(crs = US_ALBERS)
+  ) %>% 
+  filter(!is.na(fips))
+}
+```
+
+```{r}
+top_complaints_barplot <- function(call_data) {
+  call_data %>% 
+    count(complaints, name = "num_calls") %>% 
+    top_n(10, num_calls) %>% 
+    mutate(complaints = str_to_title(complaints)) %>% 
+    ggplot(
+      mapping = aes(
+        x = fct_reorder(complaints, num_calls), 
+        y = num_calls
+      )
+    ) +
+    geom_col(fill = "rosybrown2") +
+    coord_flip() +
+    theme_bw() +
+    labs(
+      title = "Top Ten 311 Call Complaints",
+      x = NULL,
+      y = "Number of Calls"
+    )
+}
+```
+
+
+```{r}
+top_complaint_map <- function(call_data, nyc_data) {
+  top_complaints <-
+    call_data %>% 
+    st_set_geometry(NULL) %>% 
+    group_by(fips, complaints) %>% 
+    summarize(num_call = sum(n())) %>% 
+    group_by(fips) %>% 
+    top_n(1, num_call) %>% 
+    slice(1) %>% 
+    ungroup() %>% 
+    unique() %>% 
+    arrange(fips) %>% 
+    mutate(complaints = str_to_title(complaints)) %>% 
+    mutate(
+      complaints = if_else(
+        complaints %in% top_seven_complaints,
+        true = complaints,
+        false = "Other"
+      )
+    ) %>% 
+    left_join(nyc_data, by = "fips")
+  
+  labels_complaint <- 
+    sprintf(
+      "Top Complaint: %s",
+      top_complaints$complaints
+    ) %>% 
+    lapply(htmltools::HTML)
+  
+  colors_complaints <- 
+    colorFactor(
+      palette = "Accent", 
+      domain = top_complaints$complaints 
+      )
+  
+  leaflet() %>%  
+    addProviderTiles(providers$CartoDB.Positron) %>% 
+    setView(-73.95, 40.78, 11.4) %>% 
+    addPolygons(
+      data = top_complaints$geometry,
+      weight = 1,
+      fillOpacity = 1,
+      color = colors_complaints(top_complaints$complaints),
+      label = labels_complaint,
+      highlightOptions = highlightOptions(
+        color = "red", 
+        weight = 3,
+        bringToFront = TRUE
+      )
+    )
+}
+```
+
+```{r}
+just_noise <- function(data){
+  data %>% 
+    filter(complaints == "noise") %>% 
+    group_by(fips) %>% 
+    mutate(
+      noise_calls = n()
+    ) %>% 
+    ungroup() %>% 
+    mutate(noise_calls_per_person = noise_calls / total_pop) %>% 
+    select(fips, med_income, percent_white, noise_calls_per_person) %>% 
+    drop_na(med_income, percent_white, noise_calls_per_person) %>% 
+    arrange(fips) %>% 
+    select(-geometry) %>% 
+    unique()
+}
+```
+
+```{r}
+just_heating <- function(data){
+  data %>% 
+    filter(complaints == "heating") %>% 
+    group_by(fips) %>% 
+    mutate(
+      heat_calls = n()
+    ) %>% 
+    ungroup() %>% 
+    mutate(heat_calls_per_person = heat_calls / total_pop) %>% 
+    select(fips, med_income, percent_white, heat_calls_per_person) %>% 
+    drop_na(med_income, percent_white, heat_calls_per_person) %>% 
+    arrange(fips) %>% 
+    select(-geometry) %>% 
+    unique()
+}
+```
+
+
+About the Project {data-navmenu="About"}
+=====================================
+
+Many cities across the country are experiencing gentrification, such as New York, San Francisco, Los Angeles, and Philadelphia. Anecdotally, we hear stories of the disruptive effects of gentrification, where new people move in to communities, often low-income communities or communities of color. There have been instances of conflict between historical residents and new residents of the neighborhoods. In gentrifying neighborhoods, there are instances of longtime residents being evicted, small businesses closing down, and the police being involved in things like noise complaints. 
+
+For this project, I was interested in looking at police presence in gentrifying neighborhoods, through data on gentrification and 311 (non emergency) police calls in the New York City. Specifically, I wanted to ask the question: As neighborhoods gentrify, do the amount of 311 calls increase? Are incoming residents to gentrifying neighborhoods more likely to call 311 to address issues such as noise or other quality of life issues?
+
+As a proxy for a formal measurement of gentrification, I used median household income and percent white or each census tract in Manhattan. I sourced all income and racial demographic data from the Census Bureau's American Community Survey for the years 2010 to 2017. I sourced all 311 call data from NYC Open Data. 
+
+More on 311 Calls and Other Studies {data-navmenu="About"}
+=====================================
+
+311 calls are non-emergency police calls. People call 311 for things like noise complaints, blocked roads, and building issues. All "quality of life" complaints go under 311. Luckily for me, New York City publishes all their 311 data, which you can check out on [their website](https://data.cityofnewyork.us/Social-Services/311-Service-Requests/fvrb-kbbt). This dataset contains every single 311 call since 2010!
+
+I specifically look at the years 2010 to 2017 to see if there were any trends in calls over time.
+
+To learn more about 311 calls, you can read [this page published by the City of New York](https://www1.nyc.gov/nyc-resources/service/980/nyc311).
+
+To read studies and articles done by others on this topic, you can check those out here:
+
+[CityLab](https://www.citylab.com/equity/2018/10/yes-311-nuisance-calls-are-climbing-gentrifying-neighborhoods/573271/)
+
+[WNYC](https://www.wnyc.org/story/science-vs-gentrification-and-noise-complaints/)
+
+[BuzzFeed](https://www.buzzfeednews.com/article/lamvo/gentrification-complaints-311-new-york)
+
+[Towards Data Science](https://towardsdatascience.com/what-can-311-noise-complaints-in-gowanus-tell-us-about-gentrification-444c7da0a07a)
+
+Manhattan Demographics {data-navmenu="Demographics"}
+=====================================
+
+Column 
+-------------------------------------
+    
+### Demographics
+
+```{r}
+join_vars <- 
+  c("Year", 
+    "Total Population", 
+    "Median Income", 
+    "Percent White", 
+    "Total # of 311 Calls"
+    )
+
+all_years <-
+  single_year(nyc_2010_with_calls, 2010) %>% 
+  full_join(single_year(nyc_2011_with_calls, 2011), by = join_vars) %>% 
+  full_join(single_year(nyc_2012_with_calls, 2012), by = join_vars) %>% 
+  full_join(single_year(nyc_2013_with_calls, 2013), by = join_vars) %>% 
+  full_join(single_year(nyc_2014_with_calls, 2014), by = join_vars) %>% 
+  full_join(single_year(nyc_2015_with_calls, 2015), by = join_vars) %>% 
+  full_join(single_year(nyc_2016_with_calls, 2016), by = join_vars) %>% 
+  full_join(single_year(nyc_2017_with_calls, 2017), by = join_vars)
+
+all_years %>% 
+  select(-`Total # of 311 Calls`) %>% 
+  knitr::kable()
+```
+   
+Column {.tabset}
+-------------------------------------
+### Population
+
+```{r}
+all_years %>% 
+  ggplot(mapping = aes(x = Year, y = `Total Population` / 1e6)) +
+  geom_line() +
+  scale_x_continuous(breaks = seq(2010, 2017, 1)) +
+  scale_y_continuous(
+    breaks = seq(1.58, 1.66, 0.02),
+    limits = c(1.58, 1.66)
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "Total of Population of Manhattan from 2010 to 2017",
+    caption = "Source: US Census Bureau",
+    x = "Year",
+    y = "Total Population (Millions)"
+  )
+```
+
+### Median Income
+
+```{r}
+all_years %>% 
+  ggplot(mapping = aes(x = Year, y = `Median Income`)) +
+  geom_line() +
+  scale_x_continuous(breaks = seq(2010, 2017, 1)) +
+  scale_y_continuous(
+    labels = scales::dollar
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "Median Income of Manhattan from 2010 to 2017",
+    subtitle = "Average Weighted by Population",
+    caption = "Source: US Census Bureau",
+    x = "Year",
+    y = "Average Median Income"
+  )
+```
+
+### Percent White
+
+```{r}
+all_years %>% 
+  ggplot(mapping = aes(x = Year, y = `Percent White`)) +
+  geom_line() +
+  scale_x_continuous(breaks = seq(2010, 2017, 1)) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "Percent White of Manhattan from 2010 to 2017",
+    subtitle = "Average Weighted by Population",
+    caption = "Source: US Census Bureau",
+    x = "Year",
+    y = "Average Percent White"
+  )
+```
+
+### Notes
+
+* Between 2010 and 2017, Manhattan experienced a population growth from 1.58 million to 1.65 million.
+* The median income of the city as whole went from 69k to 86k.
+* The percent white stayed about the same, at around 56%-57.
+
+311 Calls in 2010 {data-navmenu="311 Calls"}
+=====================================
+
+Column
+-------------------------------------
+
+### Map of Top Complaints per Census Tract
+
+```{r}
+calls_2010 <- get_call_data(police_calls_2010, nyc_2010_with_calls)
+top_complaint_map(calls_2010, nyc_2010_with_calls)
+```
+
+Column {.tabset}
+-------------------------------------
+    
+### Top Complaints in 2010
+
+```{r}
+top_complaints_barplot(calls_2010)
+```
+
+### 311 Calls Over the Year
+
+```{r}
+calls_2010 %>% 
+  ggplot(mapping = aes(x = date)) +
+  geom_freqpoly(binwidth = 6) +
+  scale_x_date(
+    breaks = seq(ymd("2010-01-01"), ymd("2010-12-31"), "1 month"),
+    date_labels = "%b"
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Calls over the Year",
+    x = "Month",
+    y = "Number of 311 Calls"
+  )
+```
+
+311 Calls in 2011 {data-navmenu="311 Calls"}
+=====================================
+
+Column
+-------------------------------------
+
+### Map of Top Complaints per Census Tract
+
+```{r}
+calls_2011 <- get_call_data(police_calls_2011, nyc_2011_with_calls)
+top_complaint_map(calls_2011, nyc_2011_with_calls)
+```
+
+Column {.tabset}
+-------------------------------------
+    
+### Top Complaints in 2011
+
+```{r}
+top_complaints_barplot(calls_2011)
+```
+
+### 311 Calls Over the Year
+
+```{r}
+calls_2011 %>% 
+  ggplot(mapping = aes(x = date)) +
+  geom_freqpoly(binwidth = 6) +
+  scale_x_date(
+    breaks = seq(ymd("2011-01-01"), ymd("2011-12-31"), "1 month"),
+    date_labels = "%b"
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Calls over the Year",
+    x = "Month",
+    y = "Number of 311 Calls"
+  )
+```
+
+
+311 Calls in 2012 {data-navmenu="311 Calls"}
+=====================================
+
+Column
+-------------------------------------
+
+### Map of Top Complaints per Census Tract
+
+```{r}
+calls_2012 <- get_call_data(police_calls_2012, nyc_2012_with_calls)
+top_complaint_map(calls_2012, nyc_2012_with_calls)
+```
+
+Column {.tabset}
+-------------------------------------
+    
+### Top Complaints in 2012
+
+```{r}
+top_complaints_barplot(calls_2012)
+```
+
+### 311 Calls Over the Year
+
+```{r}
+calls_2012 %>% 
+  ggplot(mapping = aes(x = date)) +
+  geom_freqpoly(binwidth = 6) +
+  scale_x_date(
+    breaks = seq(ymd("2012-01-01"), ymd("2012-12-31"), "1 month"),
+    date_labels = "%b"
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Calls over the Year",
+    x = "Month",
+    y = "Number of 311 Calls"
+  )
+```
+
+
+311 Calls in 2013 {data-navmenu="311 Calls"}
+=====================================
+
+Column 
+-------------------------------------
+
+### Map of Top Complaints per Census Tract
+
+```{r}
+calls_2013 <- get_call_data(police_calls_2013, nyc_2013_with_calls)
+top_complaint_map(calls_2013, nyc_2013_with_calls)
+```
+
+Column {.tabset}
+-------------------------------------
+    
+### Top Complaints in 2013
+
+```{r}
+top_complaints_barplot(calls_2013)
+```
+
+### 311 Calls Over the Year
+
+```{r}
+calls_2013 %>% 
+  ggplot(mapping = aes(x = date)) +
+  geom_freqpoly(binwidth = 6) +
+  scale_x_date(
+    breaks = seq(ymd("2013-01-01"), ymd("2013-12-31"), "1 month"),
+    date_labels = "%b"
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Calls over the Year",
+    x = "Month",
+    y = "Number of 311 Calls"
+  )
+```
+
+311 Calls in 2014 {data-navmenu="311 Calls"}
+=====================================
+
+Column
+-------------------------------------
+
+### Map of Top Complaints per Census Tract
+
+```{r}
+calls_2014 <- get_call_data(police_calls_2014, nyc_2014_with_calls)
+top_complaint_map(calls_2014, nyc_2014_with_calls)
+```
+
+Column {.tabset}
+-------------------------------------
+    
+### Top Complaints in 2014
+
+```{r}
+top_complaints_barplot(calls_2014)
+```
+
+### 311 Calls Over the Year
+
+```{r}
+calls_2014 %>% 
+  ggplot(mapping = aes(x = date)) +
+  geom_freqpoly(binwidth = 6) +
+  scale_x_date(
+    breaks = seq(ymd("2014-01-01"), ymd("2014-12-31"), "1 month"),
+    date_labels = "%b"
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Calls over the Year",
+    x = "Month",
+    y = "Number of 311 Calls"
+  )
+```
+
+311 Calls in 2015 {data-navmenu="311 Calls"}
+=====================================
+
+Column 
+-------------------------------------
+
+### Map of Top Complaints per Census Tract
+
+```{r}
+calls_2015 <- get_call_data(police_calls_2015, nyc_2015_with_calls)
+top_complaint_map(calls_2015, nyc_2015_with_calls)
+```
+
+Column {.tabset}
+-------------------------------------
+    
+### Top Complaints in 2015
+
+```{r}
+top_complaints_barplot(calls_2015)
+```
+
+### 311 Calls Over the Year
+
+```{r}
+calls_2015 %>% 
+  ggplot(mapping = aes(x = date)) +
+  geom_freqpoly(binwidth = 6) +
+  scale_x_date(
+    breaks = seq(ymd("2015-01-01"), ymd("2015-12-31"), "1 month"),
+    date_labels = "%b"
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Calls over the Year",
+    x = "Month",
+    y = "Number of 311 Calls"
+  )
+```
+
+311 Calls in 2016 {data-navmenu="311 Calls"}
+=====================================
+
+Column
+-------------------------------------
+
+### Map of Top Complaints per Census Tract
+
+```{r}
+calls_2016 <- get_call_data(police_calls_2016, nyc_2016_with_calls)
+top_complaint_map(calls_2016, nyc_2016_with_calls)
+```
+
+Column {.tabset}
+-------------------------------------
+    
+### Top Complaints in 2016
+
+```{r}
+top_complaints_barplot(calls_2016)
+```
+
+### 311 Calls Over the Year
+
+```{r}
+calls_2016 %>% 
+  ggplot(mapping = aes(x = date)) +
+  geom_freqpoly(binwidth = 6) +
+  scale_x_date(
+    breaks = seq(ymd("2016-01-01"), ymd("2016-12-31"), "1 month"),
+    date_labels = "%b"
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Calls over the Year",
+    x = "Month",
+    y = "Number of 311 Calls"
+  )
+```
+
+311 Calls in 2017 {data-navmenu="311 Calls"}
+=====================================
+
+Column
+-------------------------------------
+
+### Map of Top Complaints per Census Tract
+
+```{r}
+calls_2017 <- get_call_data(police_calls_2017, nyc_2017_with_calls)
+top_complaint_map(calls_2017, nyc_2017_with_calls)
+```
+
+Column {.tabset}
+-------------------------------------
+    
+### Top Complaints in 2017
+
+```{r}
+top_complaints_barplot(calls_2017)
+```
+
+### 311 Calls Over the Year
+
+```{r}
+calls_2017 %>% 
+  ggplot(mapping = aes(x = date)) +
+  geom_freqpoly(binwidth = 6) +
+  scale_x_date(
+    breaks = seq(ymd("2017-01-01"), ymd("2017-12-31"), "1 month"),
+    date_labels = "%b"
+  ) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Calls over the Year",
+    x = "Month",
+    y = "Number of 311 Calls"
+  )
+```
+
+Notes {data-navmenu="311 Calls"}
+=====================================
+
+When looking at the top reasons people call 311, there are a few ones that consistently pop out: noise and heating. In taking a look at the maps, it's clear to see that the most common top complaint for a census tract is noise. Noise in this case has been defined to encompass many different types of noise complaints: residential, street, and commercial. Between these categorizations, noise pops out as the most common quality of life complaint for residents of Manhattan.
+
+If you take a look at the tab, 311 Calls over the Year, you will be able to see that 311 calls will peak during winter months, starting around November and lasting until February. This probably is due to a rise in heating 311 calls, as the weather gets colder. Note that heating refers to building heating and hot water. The 311 website suggests that residents first start by talking to their landlords, but offers 311 police services as well.
+
+
+New York City in 2010 {data-navmenu="Chloropleth Maps"}
+=====================================
+
+```{r}
+single_year(nyc_2010_with_calls, 2010) %>% knitr::kable()
+```
+
+### Chloropleth Map of New York City by 311 Calls in 2010
+
+```{r}
+generate_chloropleth(nyc_2010_with_calls)
+```
+
+New York City in 2011 {data-navmenu="Chloropleth Maps"}
+=====================================
+
+```{r}
+single_year(nyc_2011_with_calls, 2011) %>% knitr::kable()
+```
+
+### Chloropleth Map of New York City by 311 Calls in 2011
+
+```{r}
+generate_chloropleth(nyc_2011_with_calls)
+```
+
+New York City in 2012 {data-navmenu="Chloropleth Maps"}
+=====================================
+
+```{r}
+single_year(nyc_2012_with_calls, 2012) %>% knitr::kable()
+```
+
+### Chloropleth Map of New York City by 311 Calls
+
+```{r}
+generate_chloropleth(nyc_2012_with_calls)
+```
+
+New York City in 2013 {data-navmenu="Chloropleth Maps"}
+=====================================
+
+```{r}
+single_year(nyc_2013_with_calls, 2013) %>% knitr::kable()
+```
+
+### Chloropleth Map of New York City by 311 Calls
+
+```{r}
+generate_chloropleth(nyc_2013_with_calls)
+```
+
+New York City in 2014 {data-navmenu="Chloropleth Maps"}
+=====================================
+
+```{r}
+single_year(nyc_2014_with_calls, 2014) %>% knitr::kable()
+```
+
+### Chloropleth Map of New York City by 311 Calls
+
+```{r}
+generate_chloropleth(nyc_2014_with_calls)
+```
+
+New York City in 2015 {data-navmenu="Chloropleth Maps"}
+=====================================
+
+```{r}
+single_year(nyc_2015_with_calls, 2015) %>% knitr::kable()
+```
+
+### Chloropleth Map of New York City by 311 Calls
+
+```{r}
+generate_chloropleth(nyc_2015_with_calls)
+```
+
+New York City in 2016 {data-navmenu="Chloropleth Maps"}
+=====================================
+
+```{r}
+single_year(nyc_2016_with_calls, 2016) %>% knitr::kable()
+```
+
+### Chloropleth Map of New York City by 311 Calls
+
+```{r}
+generate_chloropleth(nyc_2016_with_calls)
+```
+
+New York City in 2017 {data-navmenu="Chloropleth Maps"}
+=====================================
+
+```{r}
+single_year(nyc_2017_with_calls, 2017) %>% knitr::kable()
+```
+
+### Chloropleth Map of New York City by 311 Calls
+
+```{r}
+generate_chloropleth(nyc_2017_with_calls)
+```
+
+Notes {data-navmenu="Chloropleth Maps"}
+=====================================
+
+Across the years, the number of total 311 calls increase. From the cloropleth between 2010 and 2017, there appear to be more calls being made in the Lower West Side, around Chelsea. There always, however, is a hotspot of calls being made from way up north, near Washington Heights and Inwood. According to the [New York Post](https://nypost.com/2018/03/04/these-nyc-neighborhoods-have-the-most-noise-complaints/), Washington Heights and Inwood are some of the noisiest neighborhoods in New York City, with most of the noise being attributed to residential noise, like banging and loud music. 
+
+All 311 Calls {data-navmenu="Trends in 311 Calls"}
+=====================================
+
+Column {.tabset}
+-------------------------------------
+
+### Total 311 Calls
+
+```{r}
+all_years %>% 
+  ggplot(mapping = aes(x = Year, y = `Total # of 311 Calls`)) +
+  geom_line() +
+  scale_x_continuous(breaks = seq(2010, 2017, 1)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "Number of 311 Calls in Manhattan from 2010 to 2017",
+    caption = "Source: NYC Open Source",
+    x = "Year",
+    y = "Number of 311 Calls"
+  )
+```
+
+### With Change in Median Income
+
+```{r}
+tibble(
+  diff_income = nyc_2017_with_calls$med_income - nyc_2010_with_calls$med_income,
+  diff_calls = 
+    nyc_2017_with_calls$calls_per_person - nyc_2010_with_calls$calls_per_person,
+  percent_diff_income = diff_income / nyc_2010_with_calls$med_income
+) %>% 
+  drop_na(diff_income) %>% 
+  ggplot(mapping = aes(x = percent_diff_income, y = diff_calls)) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(-0.25, 3, 0.25),
+    labels = scales::percent
+  ) +
+  scale_y_continuous(breaks = seq(-0.8, 1, 0.2)) +
+  coord_cartesian(ylim = c(-0.8, 1)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "Change in Calls per Person for Percent Change in Median Household Income",
+    subtitle = "Change Measured between 2010 and 2017",
+    x = "Percent Change in Median Household Income",
+    y = "Change in 311 Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+### With Change in Percent White
+
+```{r}
+tibble(
+  diff_calls = 
+    nyc_2017_with_calls$calls_per_person - nyc_2010_with_calls$calls_per_person,
+  diff_white = 
+    nyc_2017_with_calls$percent_white - nyc_2010_with_calls$percent_white
+) %>% 
+  drop_na(diff_white) %>% 
+  ggplot(mapping = aes(x = diff_white, y = diff_calls)) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(-0.4, 0.3, 0.1),
+    labels = scales::percent
+  ) +
+  scale_y_continuous(breaks = seq(-1, 1.5, 0.2)) +
+  coord_cartesian(xlim = c(-0.4, 0.3), ylim = c(-1, 1.5)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "Change in Calls per Person for Change in Percent White",
+    subtitle = "Change Measured between 2010 and 2017",
+    x = "Change in Percent White",
+    y = "Change in 311 Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+### Notes
+
+* The number of 311 Calls increased steadily between 2012 and 2016, with a peak in 2016. 
+* Median income: There were many tracts that experienced between a 0% and 100% increase in median income between 2010 and 2017. For these tracts, there wasn't much change in the number of 311 calls per person across the income changes. There seems to be a slight trend upward for tracts experiencing a large median income increase (like > 200%), but there are not enough data points in this area to make any significant conclusions. The majority of tracts had an increase in the number of 311 calls per person, regardless of percent income change. The percent change of the median household income does not seem to be a good indicator of a trend in 311 calls.
+* Most tracts had demographic shifts, either by and increase or decrease in percent white by roughly 10%. For tracts that experienced this from 2010 to 2017, there was no signficant change in the number of 311 calls per person. In fact, most of these tracts sit around 0 in change in calls per person. Fpr tracts that have a change less than -10% or greater than +10%, there seems to be a pull upwards and downwards, respectively, but there do not seem to be enough data points to make a signficant conclusion.
+
+From looking at these data, I found there were no conclusive general trends with the sheer number of calls per person for changes in either income or percent white. Earlier we saw that most 311 complaints have to do with either noise or heating, so I decided to dig a bit deeper in these specific call types. I was interested to see if there were any trends with noise or heat complaints and demographic shifts. To do this, I started by first looking at just single years, and then at the change between 2010 and 2017.
+
+So far, my answer to my original question (As neighborhoods gentrify, do the amount of 311 calls increase?) is no, using my rudimentary measures of gentrification and the total number of 311 calls.
+
+
+311 Calls for Heating {data-navmenu="Trends in 311 Calls"}
+=====================================
+
+```{r}
+just_heating_2010 <- just_heating(calls_2010)
+just_heating_2017 <- just_heating(calls_2017)
+```
+
+
+Column {.tabset}
+-------------------------------------
+
+### 2010 Percent White
+
+```{r}
+just_heating_2010 %>% 
+  ggplot(mapping = aes(x = percent_white, y = heat_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 1, 0.1),
+    labels = scales::percent
+  ) +
+  coord_cartesian(ylim = c(0, 0.2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Heating Calls per Person for Percent White in 2010",
+    x = "Percent White",
+    y = "311 Heating Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+### 2010 Median Income 
+
+```{r}
+just_heating_2010 %>% 
+  ggplot(mapping = aes(x = med_income, y = heat_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 2.3e5, 25e3),
+    labels = scales::dollar
+  ) +
+  coord_cartesian(ylim = c(0, 0.2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Heating Calls per Person for Median Income in 2010",
+    x = "Median Income",
+    y = "311 Heating Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+### 2017 Percent White
+
+```{r}
+just_heating_2017 %>% 
+  ggplot(mapping = aes(x = percent_white, y = heat_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 1, 0.1),
+    labels = scales::percent
+  ) +
+  coord_cartesian(ylim = c(0, 0.2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Heating Calls per Person for Percent White in 2017",
+    x = "Percent White",
+    y = "311 Heating Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+### 2017 Median Income
+
+```{r}
+just_heating_2017 %>% 
+  ggplot(mapping = aes(x = med_income, y = heat_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 2.3e5, 25e3),
+    labels = scales::dollar
+  ) +
+  scale_y_continuous(breaks = seq(0, 0.2, 0.05)) +
+  coord_cartesian(ylim = c(0, 0.2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Heating Calls per Person for Median Income in 2017",
+    x = "Median Income",
+    y = "311 Heating Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+### Change Percent White
+
+```{r}
+change_heating <- 
+  just_heating_2010 %>% 
+  inner_join(just_heating_2017, by = "fips") %>% 
+  transmute(
+    percent_diff_income = (med_income.y - med_income.x) / med_income.x,
+    diff_white = percent_white.y - percent_white.x,
+    diff_calls = heat_calls_per_person.y - heat_calls_per_person.x
+  )
+```
+
+```{r}
+change_heating %>% 
+  ggplot(mapping = aes(x = diff_white, y = diff_calls)) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(-0.4, 0.3, 0.1),
+    labels = scales::percent
+  ) +
+  coord_cartesian(ylim = c(-0.2, 0.2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "Change in Heating Calls per Person for Change in Percent White",
+    subtitle = "Change Measured between 2010 and 2017",
+    x = "Change in Percent White",
+    y = "Change in 311 Heating Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+### Change Median Income
+
+```{r}
+change_heating %>% 
+  ggplot(mapping = aes(x = percent_diff_income, y = diff_calls)) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(-0.25, 3, 0.25),
+    labels = scales::percent
+  ) +
+  coord_cartesian(ylim = c(-0.2, 0.2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "Change in Heating Calls per Person for\nPercent Change in Median Household Income",
+    subtitle = "Change Measured between 2010 and 2017",
+    x = "Percent Change in Median Household Income",
+    y = "Change in 311 Heating Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+### Notes
+
+I took a look at the number of heat calls per person in each tract and plotted them against both median income and percent white of the tract. I did so for both 2010 and 2017. 
+
+For percent white in 2010 and 2017: For both of these years, you can see that tracts with a lower percent white people are more likely to call 311 for a heating complaint. Communities that are less than 50% white have a rate of 0.05 heating calls per person, while those greater than 50% white have about a 0.025 rate of heating calls per person. The shift from more heating complaints to fewer heating complaints occurs about when a tract becomes 50% white or greater. 
+
+For median income in 2010 and 2017: A similar pattern as the percent white trend appears for plots against median income of a tract. Poorer tracts are more likely to call a 311 heat complaint. Specifically, tracts that have a median income of less than $75k experience a rate of around 0.05 heating calls per person, while tracts over this threshold see a rate of around 0.025 heating calls per person. 
+
+311 heating calls address issues dealing with the heat of a building, or the hot water in a building, as described by the [City of New York](https://www1.nyc.gov/nyc-resources/service/1813/heat-or-hot-water-complaint). A hypothesis: For tracts with lower median incomes, the buildings people live in might be in a poorer condition than wealthy tracts. This might coincide with worse heating or water systems, thus resulting in more heating complaints. The percent whiteness of a tract might have some relationship to the median income of a tract, given historical socioeconomic trends.
+
+Now let's take a look at the change from 2010 to 2017. As we saw in the first tab, most tracts experienced a change in +/-10% in percent white. For these tracts, there was no significant change in the number of heating complaints made. For the tracts that had a median income increase from 0% to 100% also had no signficant change in the number of heating complaints. (There is, however, a trend upwards as the household income increases by more than 100%, but there are too few points there to make any signficant conclusions). Perhaps this is because buildings don't change much in the span of 7 years, so buildings with heating problems in 2010 would continue to have the same heating problems in 2017, regardless of who's living there. 
+
+So in total, my takeaways: race and income somewhat determine the number of heating complaints in a tract, but the change in tract demographics between 2010 and 2017 does not seem to affect the heating complaints. The answer to my initial question, therefore, continues to be a no.
+
+311 Calls for Noise {data-navmenu="Trends in 311 Calls"}
+=====================================
+
+```{r}
+just_noise_2010 <- just_noise(calls_2010)
+just_noise_2017 <- just_noise(calls_2017)
+```
+
+Column {.tabset}
+-------------------------------------
+
+### 2010 Percent White
+
+```{r}
+just_noise_2010 %>% 
+  ggplot(mapping = aes(x = percent_white, y = noise_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 1, 0.1),
+    labels = scales::percent
+  ) +
+  coord_cartesian(ylim = c(0, 0.2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Noise Calls per Person for Percent White in 2010",
+    x = "Percent White",
+    y = "311 Noise Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+### 2010 Median Income 
+
+```{r}
+just_noise_2010 %>% 
+  ggplot(mapping = aes(x = med_income, y = noise_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 2.3e5, 25e3),
+    labels = scales::dollar
+  ) +
+  coord_cartesian(ylim = c(0, 0.2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Noise Calls per Person for Median Income in 2010",
+    x = "Median Income",
+    y = "311 Noise Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+### 2017 Percent White
+
+```{r}
+just_noise_2017 %>% 
+  ggplot(mapping = aes(x = percent_white, y = noise_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 1, 0.1),
+    labels = scales::percent
+  ) +
+  coord_cartesian(ylim = c(0, 0.2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Noise Calls per Person for Percent White in 2017",
+    x = "Percent White",
+    y = "311 Noise Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+### 2017 Median Income
+
+```{r}
+just_noise_2017 %>% 
+  ggplot(mapping = aes(x = med_income, y = noise_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 2.3e5, 25e3),
+    labels = scales::dollar
+  ) +
+  coord_cartesian(ylim = c(0, 0.2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Noise Calls per Person for Median Income in 2017",
+    x = "Median Income",
+    y = "311 Noise Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+### Change Percent White
+
+```{r}
+change_noise <-
+  just_noise_2010 %>% 
+  inner_join(just_noise_2017, by = "fips") %>% 
+  transmute(
+    percent_diff_income = (med_income.y - med_income.x) / med_income.x,
+    diff_white = percent_white.y - percent_white.x,
+    diff_calls = noise_calls_per_person.y - noise_calls_per_person.x
+  )
+```
+
+```{r}
+change_noise %>% 
+  ggplot(mapping = aes(x = diff_white, y = diff_calls)) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(-0.4, 0.3, 0.1),
+    labels = scales::percent
+  ) +
+  coord_cartesian(ylim = c(-0.1, 0.3)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "Change in Noise Calls per Person for Change in Percent White",
+    subtitle = "Change Measured between 2010 and 2017",
+    x = "Change in Percent White",
+    y = "Change in 311 Noise Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+### Change Median Income
+
+```{r}
+change_noise %>% 
+  ggplot(mapping = aes(x = percent_diff_income, y = diff_calls)) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(-0.25, 3, 0.25),
+    labels = scales::percent
+  ) +
+  coord_cartesian(ylim = c(-0.05, 0.3)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "Change in Noise Calls per Person for\nPercent Change in Median Household Income",
+    subtitle = "Change Measured between 2010 and 2017",
+    x = "Percent Change in Median Household Income",
+    y = "Change in 311 Noise Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+### Takeaways
+
+I took a look at the number of noise complaint calls per person in each tract and plotted them against both median income and percent white of the tract. I did so for both 2010 and 2017. 
+
+For percent white in 2010 and 2017: The plots show that the number of noise complaints peaks at a certain percentage white of a tract. In 2010, a tract that was %50 white was more likely to call 311 for a noise complaint than a tract that was 30% white or 70% white. However, the rate of noise calls per person starts to pick up again at around 90% white. In 2017, there's a similar trend, but with the peak in noise complaint rate to be at around 65% white. For communities either less white or more white than this, the rate of calling noise complaints was smaller. Especially for tracts that are greater than 70% in 2017, there were very few noise complaints called. While this observation doesn't directly answer my question about gentrification and 311 call trends, there's something interesting to note: the most noise complaints come from tracts where there is a mix of people of different races living together. Gentrified neighborhoods could very well be among those tracts that have a mix of white people and non-white people, where there is a peak in the number of noise complaints made. 
+
+For median income in 2010 and 2017: In 2010, there pretty consistent noise complaint rates among tracts of different income levels, with a slight dip at around $75k. For tracts with either smaller or larger median incomes, the noise complaint rate increases. In 2017, we see a similar trend, with a pretty consistent noise complaint rate across income levels, except for a dip around 85k. We can't conclude anything too significant, but I suppose we could say that there are slightly fewer noise complaint calls being made in tracts that are middle-income, around 75k to 85k. 
+
+When looking at the change between 2010 and 2017, it's clear to see that in general, the number of noise complaints has increased dramatically (around 0.1 call per person more). For those same tracts that we talked about earlier, that changed between -10% white to +10% white, there was a consistent increase in noise complaints, but not skewed to one side. This visualzation indicates that neighborhoods that change to be way less white experience more noise complaints, but there don't seem to be enough data around there to make a definitive conclusion. The same goes for change in median income: while noise complaints increased overall, the tracts that changed from a 0% to 100% increase in median income had roughly the same increase in noise complaint rate. 
+
+Again, we saw some interesting trends in terms of demographics of a tract for a single year and noise complaints, but there's no signficant conclusion about neighborhoods than change over time. 
+
+Other Thoughts and Takeaways {data-navmenu="Trends in 311 Calls"}
+=====================================
+
+While we saw some interesting trends in types of calls (i.e. either noise or heating) with tract demographics, I didn't reach any significant conlusion or answer to the question: do gentrified neighborhoods experience more 311 calls? 
+
+A few ways I could see improvement in the work I did, to maybe lead to some more interesting insights:
+
+* I just looked at tract race, and not ethnicity. Under the US Census Bureau, many Hispanic and Latinx people fall under white as a race. I would be interested to see if including ethnicity, would change any of the results.
+* I used just median income and percent white as a measure of gentrification, but there are better and more robust ways to measuring gentrification. This might also lead to some more insights. 
+

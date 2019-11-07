@@ -1,0 +1,1123 @@
+---
+title: "NYC 311 Calls"
+author: "Natalie"
+date: 2019-03-12
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(sf)
+
+file_2010 <- "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2010.rds"
+file_2011 <- "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2011.rds"
+file_2012 <- "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2012.rds"
+file_2013 <- "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2013.rds"
+file_2014 <- "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2014.rds"
+file_2015 <- "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2015.rds"
+file_2016 <- "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2016.rds"
+file_2017 <- "~/Desktop/DCL/C01/nyc_with_calls/nyc_with_calls_2017.rds"
+
+nyc_2010 <- read_rds(file_2010)
+nyc_2011 <- read_rds(file_2011)
+nyc_2012 <- read_rds(file_2012)
+nyc_2013 <- read_rds(file_2013)
+nyc_2014 <- read_rds(file_2014)
+nyc_2015 <- read_rds(file_2015)
+nyc_2016 <- read_rds(file_2016)
+nyc_2017 <- read_rds(file_2017)
+```
+
+Now let's get plotting! I want to look intially for each year at the number of calls per tract versus other measures of the tract. Let's start with 2010:
+
+```{r}
+nyc_2010 %>% 
+  drop_na(calls_per_person, total_pop) %>% 
+  ggplot(mapping = aes(x = total_pop, y = calls_per_person)) +
+  geom_point()
+```
+ 
+ Looking at this, we want to remove some outliers. Let's suppose that we are only going to look at tracts that have more than 2000 residents. 
+ 
+```{r}
+nyc_2010 %>% 
+  filter(total_pop > 2000) %>% 
+  ggplot(mapping = aes(x = total_pop, y = calls_per_person)) +
+  geom_point()
+```
+
+Now let's measure versus other tract measurements. We have a few to use:
+
+* Average rent
+* Percent white
+* Median household income
+
+Average rent:
+
+```{r}
+nyc_2010 %>% 
+  filter(total_pop > 2000) %>% 
+  mutate(avg_rent = na_if(avg_rent, NaN)) %>% 
+  drop_na(avg_rent, calls_per_person) %>% 
+  ggplot(mapping = aes(x = avg_rent, y = calls_per_person)) +
+  geom_point()
+```
+
+Percent white:
+
+```{r}
+nyc_2010 %>% 
+  filter(total_pop > 2000) %>% 
+  ggplot(mapping = aes(x = percent_white, y = calls_per_person)) +
+  geom_point()
+```
+
+Median household income:
+
+```{r}
+nyc_2010 %>% 
+  filter(total_pop > 2000) %>% 
+  drop_na(calls_per_person, med_income) %>% 
+  ggplot(mapping = aes(x = med_income, y = calls_per_person)) +
+  geom_point()
+```
+
+What I'm most interested in is the change from years in terms of calls.
+
+```{r}
+reform_df <- function(data, year){
+  data %>%
+    mutate(
+      year = year,
+      rent_increase = nyc_2017$avg_rent > avg_rent,
+      white_increase = nyc_2017$percent_white > percent_white,
+      income_increase = nyc_2017$med_income > med_income
+    )
+}
+
+nyc_2010 <- reform_df(nyc_2010, 2010)
+nyc_2011 <- reform_df(nyc_2011, 2011)
+nyc_2012 <- reform_df(nyc_2012, 2012)
+nyc_2013 <- reform_df(nyc_2013, 2013)
+nyc_2014 <- reform_df(nyc_2014, 2014)
+nyc_2015 <- reform_df(nyc_2015, 2015)
+nyc_2016 <- reform_df(nyc_2016, 2016)
+nyc_2017 <- reform_df(nyc_2017, 2017)
+
+full_nyc <-
+  nyc_2010 %>% 
+  rbind(nyc_2011, nyc_2012, nyc_2013, nyc_2014, nyc_2015, nyc_2016, nyc_2017)
+
+nyc_3pts <-
+  rbind(nyc_2010, nyc_2014, nyc_2017)
+```
+
+```{r}
+full_nyc %>%   
+  filter(total_pop > 2000, rent_increase == TRUE) %>% 
+  mutate(avg_rent = na_if(avg_rent, NaN)) %>% 
+  drop_na(avg_rent, calls_per_person) %>% 
+  arrange(fips, year) %>% 
+  ggplot(mapping = aes(x = avg_rent, y = calls_per_person)) +
+  geom_point(aes(alpha = year), size = 2) +
+  geom_path(aes(alpha = year), size = 1) +
+  scale_alpha_continuous(breaks = seq(2010, 2017, 1), limits = c(2010, 2017))
+
+full_nyc %>%   
+  filter(total_pop > 2000, white_increase == TRUE) %>% 
+  drop_na(percent_white, calls_per_person) %>% 
+  arrange(fips, year) %>% 
+  ggplot(mapping = aes(x = percent_white, y = calls_per_person)) +
+  geom_point(aes(alpha = year), size = 2) +
+  geom_path(aes(alpha = year), size = 1) +
+  scale_alpha_continuous(breaks = seq(2010, 2017, 1), limits = c(2010, 2017))
+
+full_nyc %>%   
+  filter(total_pop > 2000, income_increase == TRUE) %>% 
+  drop_na(med_income, calls_per_person) %>% 
+  arrange(fips, year) %>% 
+  ggplot(mapping = aes(x = med_income, y = calls_per_person)) +
+  geom_point(aes(alpha = year), size = 2) +
+  geom_path(aes(alpha = year), size = 1) +
+  scale_alpha_continuous(breaks = seq(2010, 2017, 1), limits = c(2010, 2017))
+```
+
+```{r}
+inner_join(nyc_2010, nyc_2017, by = "fips") %>%
+  filter(total_pop.x > 2000, avg_rent.y > avg_rent.x) %>% 
+  mutate(avg_rent.x = na_if(avg_rent.x, NaN)) %>% 
+  drop_na(avg_rent.x, calls_per_person.x) %>% 
+  ggplot(mapping = aes(x = avg_rent.x, y = calls_per_person.x)) +
+  geom_point(aes(color = "2010")) +
+  geom_point(aes(x = avg_rent.y, y = calls_per_person.y, color = "2017")) +
+  geom_segment(aes(xend = avg_rent.y, yend = calls_per_person.y))
+
+inner_join(nyc_2010, nyc_2017, by = "fips") %>%
+  filter(total_pop.x > 2000, percent_white.y > percent_white.x) %>% 
+  drop_na(percent_white.x, calls_per_person.x) %>% 
+  ggplot(mapping = aes(x = percent_white.x, y = calls_per_person.x)) +
+  geom_point(aes(color = "2010")) +
+  geom_point(aes(x = percent_white.y, y = calls_per_person.y, color = "2017")) +
+  geom_segment(aes(xend = percent_white.y, yend = calls_per_person.y))
+
+inner_join(nyc_2010, nyc_2017, by = "fips") %>%
+  filter(total_pop.x > 2000, med_income.y > med_income.x) %>% 
+  drop_na(med_income.x, calls_per_person.x) %>% 
+  ggplot(mapping = aes(x = med_income.x, y = calls_per_person.x)) +
+  geom_point(aes(color = "2010")) +
+  geom_point(aes(x = med_income.y, y = calls_per_person.y, color = "2017")) +
+  geom_segment(aes(xend = med_income.y, yend = calls_per_person.y))
+
+inner_join(nyc_2010, nyc_2017, by = "fips") %>%
+  filter(total_pop.x > 2000, med_income.y > med_income.x) %>% 
+  drop_na(med_income.x, calls_per_person.x) %>% 
+  ggplot(mapping = aes(x = med_income.x, y = calls_per_person.x)) +
+  geom_segment(
+    aes(xend = med_income.y, yend = calls_per_person.y),
+    arrow = arrow(length = unit(0.2, "cm"))
+  )
+```
+
+
+```{r}
+filter_data <- function(data){
+  data %>% 
+    filter(total_pop > 2000) %>% 
+    drop_na(med_income)
+}
+
+filtered_2010 <- filter_data(nyc_2010)
+filtered_2012 <- filter_data(nyc_2012)
+filtered_2014 <- filter_data(nyc_2014)
+filtered_2016 <- filter_data(nyc_2016)
+
+filtered_2010 %>% 
+  ggplot(aes(x = med_income, y = calls_per_person)) +
+  geom_point(aes(color = "2010")) +
+  geom_point(
+    data = filtered_2012, 
+    aes(x = med_income, y = calls_per_person, color = "2012")
+  ) + 
+  geom_point(
+    data = filtered_2014, 
+    aes(x = med_income, y = calls_per_person, color = "2014")
+  ) + 
+  geom_point(
+    data = filtered_2016, 
+    aes(x = med_income, y = calls_per_person, color = "2016")
+  ) 
+```
+
+```{r}
+filtered_2010 %>% 
+  select(fips, med_income_2010 = med_income, calls_2010 = calls_per_person) %>% 
+  inner_join(
+    filtered_2012 %>% 
+      select(fips, med_income_2012 = med_income, calls_2012 = calls_per_person),
+    by = "fips"
+  ) %>% 
+  inner_join(
+    filtered_2014 %>% 
+      select(fips, med_income_2014 = med_income, calls_2014 = calls_per_person),
+    by = "fips"
+  ) %>% 
+  inner_join(
+    filtered_2016 %>% 
+      select(fips, med_income_2016 = med_income, calls_2016 = calls_per_person),
+    by = "fips"
+  ) %>% 
+  ggplot() +
+  geom_segment(
+    aes(
+      x = med_income_2010, 
+      y = calls_2010, 
+      xend = med_income_2012, 
+      yend = calls_2012
+    ),
+    color = "light gray"
+  ) +
+  geom_segment(
+    aes(
+      x = med_income_2012, 
+      y = calls_2012, 
+      xend = med_income_2014, 
+      yend = calls_2014
+    ),
+    color = "light gray"
+  ) +
+  geom_segment(
+    aes(
+      x = med_income_2014, 
+      y = calls_2014, 
+      xend = med_income_2016, 
+      yend = calls_2016
+    ),
+    color = "light gray"
+  ) +
+  geom_point(aes(x = med_income_2010, y = calls_2010, color = "2010")) + 
+  geom_point(aes(x = med_income_2012, y = calls_2012, color = "2012")) + 
+  geom_point(aes(x = med_income_2014, y = calls_2014, color = "2014")) + 
+  geom_point(aes(x = med_income_2016, y = calls_2016, color = "2016")) +
+  scale_color_manual(
+    values = c("red3", "orange3", "yellow3", "springgreen4")
+  ) +
+  theme()
+```
+
+```{r}
+inner_join(nyc_2010, nyc_2017, by = "fips") %>%
+  filter(total_pop.x > 2000, med_income.y > med_income.x) %>% 
+  drop_na(med_income.x, calls_per_person.x) %>% 
+  ggplot(mapping = aes(x = med_income.x, y = calls_per_person.x)) +
+  geom_segment(
+    aes(xend = med_income.y, yend = calls_per_person.y),
+    arrow = arrow(length = unit(0.2, "cm"))
+  ) +
+  geom_label(
+    x = 200000, 
+    y = 0.8, 
+    label = "1 arrow = 1 census tract"
+  ) +
+  annotate(
+    geom = "label",
+    x = 203000,
+    y = 0.5,
+    label = "2010",
+    color = "red",
+    size = 3
+  ) +
+  annotate(
+    geom = "label",
+    x = 255000,
+    y = 0.3,
+    label = "2017",
+    color = "red",
+    size = 3
+  ) +
+  scale_x_continuous(labels = scales::dollar) +
+  coord_fixed(ratio = 200000) +
+  theme_classic() +
+  labs(
+    title = "311 Calls increase with Median Income from 2010 to 2017",
+    subtitle = "Tracking 311 calls for Census Tracts in New York City",
+    x = "Median Annual Income",
+    y = "Calls per person",
+    caption = "Source: NYC Open Data, American Fact Finder"
+  )
+```
+
+# Looking at 2010 Alone
+
+```{r}
+single_year <- function(data){
+  med_income <-
+    data %>% 
+    mutate(
+      avg_med_income = weighted.mean(
+        x = med_income, 
+        w = total_pop, 
+        na.rm = TRUE
+      )
+    ) %>% 
+    pull(avg_med_income) %>% 
+    unique()
+  
+  percent_white <-
+    data %>% 
+    mutate(
+      avg_percent_white = weighted.mean(
+        x = percent_white, 
+        w = total_pop, 
+        na.rm = TRUE
+      )
+    ) %>% 
+    pull(avg_percent_white) %>% 
+    unique()
+  
+  total_pop <-
+    data %>% 
+    mutate(
+      tot_pop_nyc = sum(total_pop)
+    ) %>% 
+    pull(tot_pop_nyc) %>% 
+    unique()
+  
+  total_calls <-
+    data %>% 
+    mutate(
+      tot_calls = sum(num_calls)
+    ) %>% 
+    pull(tot_calls) %>% 
+    unique()
+  
+  overview <- 
+    tibble(
+      `Total Population` = total_pop,
+      `Median Income` = med_income,
+      `Percent White` = percent_white,
+      `Total # of 311 Calls` = total_calls
+    ) 
+}
+
+single_year(nyc_2010)
+single_year(nyc_2011)
+```
+
+## Plotting just about 2010
+
+```{r}
+nyc_2010 %>% 
+  drop_na(med_income, calls_per_person) %>% 
+  filter(calls_per_person < 1) %>% 
+  ggplot(mapping = aes(x = med_income, y = calls_per_person)) +
+  geom_point() +
+  geom_smooth()
+
+nyc_2010 %>% 
+  drop_na(percent_white, calls_per_person) %>% 
+  filter(calls_per_person < 1) %>% 
+  ggplot(mapping = aes(x = percent_white, y = calls_per_person)) +
+  geom_point() +
+  geom_smooth()
+```
+
+## Plot just 2017
+
+```{r}
+nyc_2017 %>% 
+  drop_na(med_income, calls_per_person) %>% 
+  filter(calls_per_person < 1) %>% 
+  ggplot(mapping = aes(x = med_income, y = calls_per_person)) +
+  geom_point() +
+  geom_smooth()
+
+nyc_2017 %>% 
+  drop_na(percent_white, calls_per_person) %>% 
+  filter(calls_per_person < 1) %>% 
+  ggplot(mapping = aes(x = percent_white, y = calls_per_person)) +
+  geom_point() +
+  geom_smooth()
+```
+
+```{r}
+nyc_2010 %>% 
+  ggplot(mapping = aes(x = med_income, y = calls_per_person)) +
+  geom_smooth(aes(color = "2010"), se = FALSE, alpha = 0.2) +
+  geom_smooth(data = nyc_2011, aes(color = "2011"), se = FALSE) +
+  geom_smooth(data = nyc_2012, aes(color = "2012"), se = FALSE, alpha = 0.2) +
+  geom_smooth(data = nyc_2013, aes(color = "2013"), se = FALSE, alpha = 0.2) +
+  geom_smooth(data = nyc_2014, aes(color = "2014"), se = FALSE, alpha = 0.2) +
+  geom_smooth(data = nyc_2015, aes(color = "2015"), se = FALSE, alpha = 0.2) +
+  geom_smooth(data = nyc_2016, aes(color = "2016"), se = FALSE, alpha = 0.2) +
+  geom_smooth(data = nyc_2017, aes(color = "2017"), se = FALSE, alpha = 0.2)
+```
+
+
+```{r}
+nyc_2010 %>% 
+  ggplot(mapping = aes(x = percent_white, y = calls_per_person)) +
+  geom_smooth(aes(color = "2010"), se = FALSE) +
+  geom_smooth(data = nyc_2011, aes(color = "2011"), se = FALSE) +
+  geom_smooth(data = nyc_2012, aes(color = "2012"), se = FALSE) +
+  geom_smooth(data = nyc_2013, aes(color = "2013"), se = FALSE) +
+  geom_smooth(data = nyc_2014, aes(color = "2014"), se = FALSE) +
+  geom_smooth(data = nyc_2015, aes(color = "2015"), se = FALSE) +
+  geom_smooth(data = nyc_2016, aes(color = "2016"), se = FALSE) +
+  geom_smooth(data = nyc_2017, aes(color = "2017"), se = FALSE)
+```
+
+
+## Plot change in median household income from 2010 to 2017
+
+```{r}
+tibble(
+  fips = nyc_2010$fips,
+  income_2010 = nyc_2010$med_income,
+  calls_2010 = nyc_2010$calls_per_person,
+  income_2017 = nyc_2017$med_income,
+  calls_2017 = nyc_2017$calls_per_person,
+  diff_income = income_2017 - income_2010,
+  diff_calls = calls_2017 - calls_2010
+) %>% 
+  filter(calls_2010 < 1) %>% 
+  drop_na(diff_income) %>% 
+  ggplot(mapping = aes(x = diff_income, y = diff_calls)) +
+  geom_point() +
+  geom_smooth() +
+  labs(
+    title = "Difference in Calls per Person with Difference in Median Household Income"
+  )
+```
+
+```{r}
+tibble(
+  fips = nyc_2010$fips,
+  income_2010 = nyc_2010$med_income,
+  calls_2010 = nyc_2010$calls_per_person,
+  income_2017 = nyc_2017$med_income,
+  calls_2017 = nyc_2017$calls_per_person,
+  diff_income = income_2017 - income_2010,
+  diff_calls = calls_2017 - calls_2010,
+  percent_diff_income = diff_income / income_2010
+) %>% 
+  drop_na(diff_income) %>% 
+  ggplot(mapping = aes(x = percent_diff_income, y = diff_calls)) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(-0.25, 3, 0.25),
+    labels = scales::percent
+  ) +
+  scale_y_continuous(breaks = seq(-0.8, 1, 0.2)) +
+  coord_cartesian(ylim = c(-0.8, 1)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "Change in Calls per Person for Percent Change in Median Household Income",
+    subtitle = "Change Measured between 2010 and 2017",
+    x = "Percent Change in Median Household Income",
+    y = "Change in 311 Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+## Plot change in percent white
+
+```{r}
+tibble(
+  fips = nyc_2010$fips,
+  white_2010 = nyc_2010$percent_white,
+  calls_2010 = nyc_2010$calls_per_person,
+  white_2017 = nyc_2017$percent_white,
+  calls_2017 = nyc_2017$calls_per_person,
+  diff_calls = calls_2017 - calls_2010,
+  diff_white = white_2017 - white_2010
+) %>% 
+  drop_na(diff_white) %>% 
+  ggplot(mapping = aes(x = diff_white, y = diff_calls)) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(-0.4, 0.3, 0.1),
+    labels = scales::percent
+  ) +
+  scale_y_continuous(breaks = seq(-1, 1.5, 0.2)) +
+  coord_cartesian(xlim = c(-0.4, 0.3), ylim = c(-1, 1.5)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "Change in Calls per Person for Change in Percent White",
+    subtitle = "Change Measured between 2010 and 2017",
+    x = "Change in Percent White",
+    y = "Change in 311 Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+## Just looking at noise complaints 
+
+```{r}
+police_calls_2010_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2010.rds"
+police_calls_2010 <- read_rds(police_calls_2010_file)
+US_ALBERS <- "+proj=longlat +datum=WGS84 +no_defs"
+
+
+just_heating <-
+  police_calls_2010 %>% 
+  select(Latitude, Longitude, `Complaint Type`, date) %>% 
+  filter(!is.na(Latitude), !is.na(Longitude), `Complaint Type` == "HEATING") %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = US_ALBERS) %>% 
+  st_join(
+    nyc_2010 %>% 
+      select(-num_calls, -calls_per_person) %>% 
+      st_as_sf() %>% 
+      st_transform(crs = US_ALBERS)
+  ) %>% 
+  filter(!is.na(fips))
+
+just_heating %>% 
+  group_by(fips) %>% 
+  mutate(
+    heat_calls = n()
+  ) %>% 
+  ungroup() %>% 
+  mutate(heat_calls_per_person = heat_calls / total_pop) %>% 
+  ggplot(mapping = aes(x = percent_white, y = heat_calls_per_person)) +
+  geom_point()
+```
+
+Getting correct colors for complaint type leaflet maps
+
+```{r}
+top_seven_complaints <-
+  c(
+    "Heating",
+    "Noise",
+    "General Construction",
+    "Street Condition",
+    "Plumbing",
+    "Paint/Plaster",
+    "Homeless Person Assistance",
+    "Unsanitary Condition"
+  )
+
+top_calls <-
+  police_calls_2010 %>% 
+  mutate(
+    complaints = str_to_lower(`Complaint Type`)
+  ) %>%
+  mutate(
+    complaints = case_when(
+      str_detect(complaints, "heat") ~ "heating",
+      str_detect(complaints, "noise") ~ "noise",
+      TRUE ~ complaints
+    )
+  ) %>% 
+  select(Latitude, Longitude, complaints) %>% 
+  filter(!is.na(Latitude), !is.na(Longitude)) %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = US_ALBERS) %>% 
+  st_join(
+    nyc_2010 %>% 
+      select(-num_calls, -calls_per_person) %>% 
+      st_as_sf() %>% 
+      st_transform(crs = US_ALBERS)
+  ) %>% 
+  filter(!is.na(fips))
+```
+
+Now I want to just look at heating complaints
+
+```{r}
+top_calls %>% 
+  filter(complaints == "heating") %>% 
+  group_by(fips) %>% 
+  mutate(
+    heat_calls = n()
+  ) %>% 
+  ungroup() %>% 
+  mutate(heat_calls_per_person = heat_calls / total_pop) %>% 
+  drop_na(percent_white, heat_calls_per_person) %>% 
+  unique() %>% 
+  ggplot(mapping = aes(x = percent_white, y = heat_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 1, 0.1),
+    labels = scales::percent
+  ) +
+  scale_y_continuous(breaks = seq(-0.1, 0.5, 0.1)) +
+  coord_cartesian(ylim = c(-0.1, 0.5)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Heating Calls per Person for Percent White in 2010",
+    x = "Percent White",
+    y = "311 Heating Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+```{r}
+top_calls %>% 
+  filter(complaints == "heating") %>% 
+  group_by(fips) %>% 
+  mutate(
+    heat_calls = n()
+  ) %>% 
+  ungroup() %>% 
+  mutate(heat_calls_per_person = heat_calls / total_pop) %>% 
+  drop_na(med_income, heat_calls_per_person) %>% 
+  unique() %>% 
+  ggplot(mapping = aes(x = med_income, y = heat_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 2.3e5, 25e3),
+    labels = scales::dollar
+  ) +
+  scale_y_continuous(breaks = seq(0, 0.3, 0.05)) +
+  coord_cartesian(ylim = c(0, 0.3)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Heating Calls per Person for Median Income in 2010",
+    x = "Median Income",
+    y = "311 Heating Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+```{r}
+police_calls_2017_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2017.rds"
+police_calls_2017 <- read_rds(police_calls_2017_file)
+
+top_calls_2017 <-
+  police_calls_2017 %>% 
+  mutate(
+    complaints = str_to_lower(`Complaint Type`)
+  ) %>%
+  mutate(
+    complaints = case_when(
+      str_detect(complaints, "heat") ~ "heating",
+      str_detect(complaints, "noise") ~ "noise",
+      TRUE ~ complaints
+    )
+  ) %>% 
+  select(Latitude, Longitude, complaints) %>% 
+  filter(!is.na(Latitude), !is.na(Longitude)) %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = US_ALBERS) %>% 
+  st_join(
+    nyc_2017 %>% 
+      select(-num_calls, -calls_per_person) %>% 
+      st_as_sf() %>% 
+      st_transform(crs = US_ALBERS)
+  ) %>% 
+  filter(!is.na(fips))
+  
+```
+
+```{r}
+top_calls_2017 %>% 
+  filter(complaints == "heating") %>% 
+  group_by(fips) %>% 
+  mutate(
+    heat_calls = n()
+  ) %>% 
+  ungroup() %>% 
+  mutate(heat_calls_per_person = heat_calls / total_pop) %>% 
+  drop_na(percent_white, heat_calls_per_person) %>% 
+  unique() %>% 
+  ggplot(mapping = aes(x = percent_white, y = heat_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 1, 0.1),
+    labels = scales::percent
+  ) +
+  scale_y_continuous(breaks = seq(-0.1, 0.5, 0.1)) +
+  coord_cartesian(ylim = c(-0.1, 0.5)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Heating Calls per Person for Percent White in 2017",
+    x = "Percent White",
+    y = "311 Heating Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+```{r}
+top_calls_2017 %>% 
+  filter(complaints == "heating") %>% 
+  group_by(fips) %>% 
+  mutate(
+    heat_calls = n()
+  ) %>% 
+  ungroup() %>% 
+  mutate(heat_calls_per_person = heat_calls / total_pop) %>% 
+  drop_na(med_income, heat_calls_per_person) %>% 
+  unique() %>% 
+  ggplot(mapping = aes(x = med_income, y = heat_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 2.3e5, 25e3),
+    labels = scales::dollar
+  ) +
+  scale_y_continuous(breaks = seq(0, 0.2, 0.05)) +
+  coord_cartesian(ylim = c(0, 0.2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Heating Calls per Person for Median Income in 2017",
+    x = "Median Income",
+    y = "311 Heating Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+# noise calls only
+
+```{r}
+top_calls %>% 
+  filter(complaints == "noise") %>% 
+  group_by(fips) %>% 
+  mutate(
+    noise_calls = n()
+  ) %>% 
+  ungroup() %>% 
+  mutate(noise_calls_per_person = noise_calls / total_pop) %>% 
+  drop_na(percent_white, noise_calls_per_person) %>% 
+  unique() %>% 
+  ggplot(mapping = aes(x = percent_white, y = noise_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 1, 0.1),
+    labels = scales::percent
+  ) +
+  scale_y_continuous(breaks = seq(-0.5, 0.6, 0.1)) +
+  coord_cartesian(ylim = c(-0.5, 0.6)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Noise Calls per Person for Percent White in 2010",
+    x = "Percent White",
+    y = "311 Noise Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+```{r}
+top_calls %>% 
+  filter(complaints == "noise") %>% 
+  group_by(fips) %>% 
+  mutate(
+    noise_calls = n()
+  ) %>% 
+  ungroup() %>% 
+  mutate(noise_calls_per_person = noise_calls / total_pop) %>% 
+  drop_na(med_income, noise_calls_per_person) %>% 
+  unique() %>% 
+  ggplot(mapping = aes(x = med_income, y = noise_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 2.3e5, 25e3),
+    labels = scales::dollar
+  ) +
+  scale_y_continuous(breaks = seq(0, 0.35, 0.05)) +
+  coord_cartesian(ylim = c(-0, 0.35)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Noise Calls per Person for Median Income in 2010",
+    x = "Median Income",
+    y = "311 Noise Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+```{r}
+top_calls_2017 %>% 
+  filter(complaints == "noise") %>% 
+  group_by(fips) %>% 
+  mutate(
+    noise_calls = n()
+  ) %>% 
+  ungroup() %>% 
+  mutate(noise_calls_per_person = noise_calls / total_pop) %>% 
+  drop_na(percent_white, noise_calls_per_person) %>% 
+  unique() %>% 
+  ggplot(mapping = aes(x = percent_white, y = noise_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 1, 0.1),
+    labels = scales::percent
+  ) +
+  scale_y_continuous(breaks = seq(-0.6, 1.6, 0.4)) +
+  coord_cartesian(ylim = c(-0.6, 1.6)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Noise Calls per Person for Percent White in 2017",
+    x = "Percent White",
+    y = "311 Noise Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+```{r}
+just_noise <- function(data){
+  data %>% 
+    filter(complaints == "noise") %>% 
+    group_by(fips) %>% 
+    mutate(
+      noise_calls = n()
+    ) %>% 
+    ungroup() %>% 
+    mutate(noise_calls_per_person = noise_calls / total_pop) %>% 
+    select(fips, med_income, percent_white, noise_calls_per_person) %>% 
+    drop_na(med_income, percent_white, noise_calls_per_person) %>% 
+    arrange(fips) %>% 
+    select(-geometry) %>% 
+    unique()
+}
+```
+
+```{r}
+just_heating <- function(data){
+  data %>% 
+    filter(complaints == "heating") %>% 
+    group_by(fips) %>% 
+    mutate(
+      heat_calls = n()
+    ) %>% 
+    ungroup() %>% 
+    mutate(heat_calls_per_person = heat_calls / total_pop) %>% 
+    select(fips, med_income, percent_white, heat_calls_per_person) %>% 
+    drop_na(med_income, percent_white, heat_calls_per_person) %>% 
+    arrange(fips) %>% 
+    select(-geometry) %>% 
+    unique()
+}
+```
+
+```{r}
+just_noise_2017 <- just_noise(top_calls_2017)
+
+just_noise_2017 %>% 
+  ggplot(mapping = aes(x = med_income, y = noise_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 2.3e5, 25e3),
+    labels = scales::dollar
+  ) +
+  scale_y_continuous(breaks = seq(0, 0.35, 0.05)) +
+  coord_cartesian(ylim = c(-0, 0.35)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Noise Calls per Person for Median Income in 2017",
+    x = "Median Income",
+    y = "311 Noise Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+```{r}
+just_noise_2010 <- just_noise(top_calls)
+just_noise_2017 <- just_noise(top_calls_2017)
+
+just_heating_2010 <- just_heating(top_calls)
+just_heating_2017 <- just_heating(top_calls_2017)
+```
+
+```{r}
+just_heating_2010 %>% 
+  ggplot(mapping = aes(x = med_income, y = heat_calls_per_person)) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(0, 2.3e5, 25e3),
+    labels = scales::dollar
+  ) +
+  scale_y_continuous(breaks = seq(0, 0.3, 0.05)) +
+  coord_cartesian(ylim = c(0, 0.3)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "311 Heating Calls per Person for Median Income in 2010",
+    x = "Median Income",
+    y = "311 Heating Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+```{r}
+change_heating <- 
+  just_heating_2010 %>% 
+  inner_join(just_heating_2017, by = "fips") %>% 
+  transmute(
+    percent_diff_income = (med_income.y - med_income.x) / med_income.x,
+    diff_white = percent_white.y - percent_white.x,
+    diff_calls = heat_calls_per_person.y - heat_calls_per_person.x
+  )
+
+change_heating %>% 
+  ggplot(mapping = aes(x = percent_diff_income, y = diff_calls)) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(-0.25, 3, 0.25),
+    labels = scales::percent
+  ) +
+  coord_cartesian(ylim = c(-0.2, 0.2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "Change in Heating Calls per Person for\nPercent Change in Median Household Income",
+    subtitle = "Change Measured between 2010 and 2017",
+    x = "Percent Change in Median Household Income",
+    y = "Change in 311 Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+
+change_heating %>% 
+  ggplot(mapping = aes(x = diff_white, y = diff_calls)) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(-0.4, 0.3, 0.1),
+    labels = scales::percent
+  ) +
+  coord_cartesian(ylim = c(-0.2, 0.2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "Change in Heating Calls per Person for Change in Percent White",
+    subtitle = "Change Measured between 2010 and 2017",
+    x = "Change in Percent White",
+    y = "Change in 311 Heating Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+```{r}
+change_noise <-
+  just_noise_2010 %>% 
+  inner_join(just_noise_2017, by = "fips") %>% 
+  transmute(
+    percent_diff_income = (med_income.y - med_income.x) / med_income.x,
+    diff_white = percent_white.y - percent_white.x,
+    diff_calls = noise_calls_per_person.y - noise_calls_per_person.x
+  )
+
+change_noise %>% 
+  ggplot(mapping = aes(x = percent_diff_income, y = diff_calls)) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(-0.25, 3, 0.25),
+    labels = scales::percent
+  ) +
+  coord_cartesian(ylim = c(-0.05, 0.3)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "Change in Noise Calls per Person for\nPercent Change in Median Household Income",
+    subtitle = "Change Measured between 2010 and 2017",
+    x = "Percent Change in Median Household Income",
+    y = "Change in 311 Noise Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+
+change_noise %>% 
+  ggplot(mapping = aes(x = diff_white, y = diff_calls)) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point() +
+  geom_smooth(color = "orangered2") +
+  scale_x_continuous(
+    breaks = seq(-0.4, 0.3, 0.1),
+    labels = scales::percent
+  ) +
+  coord_cartesian(ylim = c(-0.1, 0.3)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  labs(
+    title = "Change in Noise Calls per Person for Change in Percent White",
+    subtitle = "Change Measured between 2010 and 2017",
+    x = "Change in Percent White",
+    y = "Change in 311 Noise Calls per Person",
+    caption = "Note: 1 Point = 1 Census Tract\nSource: US Census Bureau and NYC Open Data"
+  )
+```
+
+
+## Mapping
+
+```{r}
+top_complaint_map <- function(call_data, nyc_data) {
+  top_complaints <-
+    call_data %>% 
+    st_set_geometry(NULL) %>% 
+    group_by(fips, complaints) %>% 
+    summarize(num_call = sum(n())) %>% 
+    group_by(fips) %>% 
+    top_n(1, num_call) %>% 
+    slice(1) %>% 
+    ungroup() %>% 
+    unique() %>% 
+    arrange(fips) %>% 
+    mutate(complaints = str_to_title(complaints)) %>% 
+    mutate(
+      complaints = if_else(
+        complaints %in% top_seven_complaints,
+        true = complaints,
+        false = "Other"
+      )
+    ) %>% 
+    left_join(nyc_data, by = "fips")
+  
+  labels_complaint <- 
+    sprintf(
+      "Top Complaint: %s",
+      top_complaints$complaints
+    ) %>% 
+    lapply(htmltools::HTML)
+  
+  colors_complaints <- 
+    colorFactor(
+      palette = "Accent",
+      domain = top_complaints$complaints 
+      )
+  
+  leaflet() %>%  
+    addProviderTiles(providers$CartoDB.Positron) %>% 
+    setView(-73.95, 40.78, 11.4) %>% 
+    addPolygons(
+      data = top_complaints$geometry,
+      weight = 1,
+      fillOpacity = 1,
+      color = colors_complaints(top_complaints$complaints),
+      label = labels_complaint,
+      highlightOptions = highlightOptions(
+        color = "red", 
+        weight = 3,
+        bringToFront = TRUE
+      )
+    )
+}
+```
+
+```{r}
+top_complaint_map(top_calls, nyc_2010)
+```
+
+```{r}
+police_calls_2011_file <- "~/Desktop/DCL/C01/police_calls/police_calls_2011.rds"
+police_calls_2011 <- read_rds(police_calls_2011_file)
+
+top_calls_2011 <-
+  police_calls_2011 %>% 
+  mutate(
+    complaints = str_to_lower(`Complaint Type`)
+  ) %>%
+  mutate(
+    complaints = case_when(
+      str_detect(complaints, "heat") ~ "heating",
+      str_detect(complaints, "noise") ~ "noise",
+      TRUE ~ complaints
+    )
+  ) %>% 
+  select(Latitude, Longitude, complaints) %>% 
+  filter(!is.na(Latitude), !is.na(Longitude)) %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = US_ALBERS) %>% 
+  st_join(
+    nyc_2011 %>% 
+      select(-num_calls, -calls_per_person) %>% 
+      st_as_sf() %>% 
+      st_transform(crs = US_ALBERS)
+  ) %>% 
+  filter(!is.na(fips))
+```
+
+```{r}
+top_complaint_map(top_calls_2011, nyc_2011)
+```
+
